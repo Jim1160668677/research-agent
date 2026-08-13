@@ -1,0 +1,44 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: research-agent-api
+    ports:
+      - "8010:8010"
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:////data/research_agent.db
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - DEBUG=false
+    volumes:
+      - research-agent-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8010/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    image: node:20-alpine
+    container_name: research-agent-frontend
+    working_dir: /app
+    command: sh -c "npm install --no-audit --no-fund --registry=https://registry.npmmirror.com && npm run dev -- --host"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8010
+      - VITE_PROXY_TARGET=http://api:8010
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  research-agent-data:
