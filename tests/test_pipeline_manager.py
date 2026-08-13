@@ -107,6 +107,41 @@ async def test_manager_persists_completed_result_and_artifact_provenance(tmp_pat
 
 
 @pytest.mark.asyncio
+async def test_manager_prepares_assets_before_building_execution_plan(tmp_path):
+    await db_module.init_db()
+    run_id = await seed_run(tmp_path)
+    events = []
+
+    class PreparedBackend(FakeBackend):
+        async def preflight(self, **kwargs):
+            events.append("preflight")
+            return {"ready": True, "issues": []}
+
+        async def prepare_pipeline(self, **kwargs):
+            events.append("prepare")
+            return {"status": "verified", "commit_sha": "fixed"}
+
+        async def build_plan(self, **kwargs):
+            events.append("plan")
+            return await super().build_plan(**kwargs)
+
+        async def execute(self, plan):
+            events.append("execute")
+            return await super().execute(plan)
+
+    manager = PipelineRunManager(PreparedBackend(tmp_path / "backend"))
+    await manager._run(run_id)
+
+    assert events == ["preflight", "prepare", "plan", "execute"]
+    async with db_module.AsyncSessionLocal() as db:
+        run = (await db.execute(select(PipelineRun).where(PipelineRun.id == run_id))).scalar_one()
+        assert run.provenance["pipeline_cache"] == {
+            "status": "verified",
+            "commit_sha": "fixed",
+        }
+
+
+@pytest.mark.asyncio
 async def test_manager_cancellation_is_persisted(tmp_path):
     await db_module.init_db()
     run_id = await seed_run(tmp_path)

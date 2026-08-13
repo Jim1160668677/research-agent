@@ -1,3 +1,14 @@
+# Unreleased recovery hardening
+
+- Restored the complete local frontend dependencies, production assets, desktop build and distributable without modifying user data or model configuration.
+- Added a formal pipeline preparation stage with pinned nf-core commit verification, Windows-side prefetch, LF-only worktrees, long-path support, per-file Git blob verification, atomic activation and recoverable backup behavior.
+- Verified 259 source tests, packaged security and nine-stage research flows, deep WSL2/Nextflow/Docker readiness, and a complete 234-task `nf-core/rnaseq@3.26.0` run with zero failures.
+- Preserved the prior distributables at `dist-pre-sync-backup-20260814` and `dist-restored-backup-20260814`; GitHub publication remains paused pending user confirmation.
+
+See `docs/recovery_and_full_function_acceptance_20260814.md` for exact checksums, test cases, root causes and external prerequisites.
+
+---
+
 # Research Agent 1.3.0 release notes
 
 Release date: 2026-08-13

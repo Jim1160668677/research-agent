@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+from pathlib import Path
 
 import pytest
 
@@ -117,6 +118,90 @@ def test_output_manifest_hashes_managed_results(tmp_path):
     assert artifacts[0]["relative_path"] == "results/quant.tsv"
     assert len(artifacts[0]["sha256"]) == 64
     assert summary["files_recorded"] == 1
+
+
+@pytest.mark.asyncio
+async def test_pipeline_cache_rejects_crlf_shebang(tmp_path, monkeypatch):
+    backend = NextflowBackend(root=tmp_path / "runs", transport="wsl2")
+    asset = backend._pipeline_asset("nf-core/rnaseq")
+    script = asset / "bin" / "tool.sh"
+    script.parent.mkdir(parents=True)
+    script.write_bytes(b"#!/usr/bin/env bash\r\necho unsafe\r\n")
+    expected = "e7ca46272c8f9d5ceee3f71759f4ba551d3217a4"
+
+    async def fake_git(*arguments, **_kwargs):
+        if arguments[-2:] == ("rev-parse", "HEAD"):
+            return f"{expected}\n".encode()
+        if "refs/tags/3.26.0^{commit}" in arguments:
+            return f"{expected}\n".encode()
+        if "status" in arguments:
+            return b""
+        raise AssertionError(arguments)
+
+    async def fake_blobs(_asset, _label):
+        raise RuntimeError("Cached pipeline differs from the pinned commit in 1 tracked file(s)")
+
+    monkeypatch.setattr(backend, "_run_git", fake_git)
+    monkeypatch.setattr(backend, "_verify_worktree_blobs", fake_blobs)
+    state = await backend._inspect_pipeline_cache("nf-core/rnaseq", "3.26.0")
+
+    assert state["ready"] is False
+    assert state["status"] == "invalid"
+    assert "differs from the pinned commit" in state["error"]
+    assert str(tmp_path) not in str(state)
+
+
+@pytest.mark.asyncio
+async def test_pipeline_prepare_prefetches_pinned_commit_atomically(tmp_path, monkeypatch):
+    backend = NextflowBackend(root=tmp_path / "runs", transport="wsl2")
+    expected = "e7ca46272c8f9d5ceee3f71759f4ba551d3217a4"
+    inspections = 0
+    commands = []
+
+    async def fake_inspect(_pipeline_id, _revision):
+        nonlocal inspections
+        inspections += 1
+        if inspections == 1:
+            return {"ready": False, "status": "missing"}
+        return {
+            "ready": True,
+            "status": "verified",
+            "pipeline": "nf-core/rnaseq",
+            "revision": "3.26.0",
+            "commit_sha": expected,
+            "source_url": "https://github.com/nf-core/rnaseq",
+        }
+
+    async def fake_git(*arguments, **_kwargs):
+        commands.append(arguments)
+        if "clone" in arguments:
+            Path(arguments[-1]).mkdir(parents=True)
+        return b""
+
+    async def fake_staging(_asset, _pipeline_id, _revision):
+        return {"ready": True, "status": "verified"}
+
+    monkeypatch.setattr(backend, "_inspect_pipeline_cache", fake_inspect)
+    monkeypatch.setattr(backend, "_inspect_pipeline_cache_at", fake_staging)
+    monkeypatch.setattr(backend, "_run_git", fake_git)
+    monkeypatch.setattr("research_agent.execution.nextflow.shutil.which", lambda name: name)
+
+    state = await backend.prepare_pipeline(
+        pipeline_id="nf-core/rnaseq",
+        revision="3.26.0",
+        network_allowed=True,
+    )
+
+    clone = next(command for command in commands if "clone" in command)
+    checkout = next(command for command in commands if "checkout" in command)
+    assert "core.autocrlf=false" in clone
+    assert "core.eol=lf" in clone
+    assert "core.longpaths=true" in clone
+    assert clone[-2] == "https://github.com/nf-core/rnaseq.git"
+    assert checkout[-1] == expected
+    assert backend._pipeline_asset("nf-core/rnaseq").is_dir()
+    assert state["status"] == "downloaded_and_verified"
+    assert str(tmp_path) not in str(state)
 
 
 def test_artifact_resolution_rejects_path_escape(tmp_path):

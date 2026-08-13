@@ -143,6 +143,16 @@ class PipelineRunManager:
                 )
                 if not preflight.get("ready"):
                     raise RuntimeError("; ".join(preflight.get("issues") or ["Preflight failed"]))
+                preparation = await self._backend.prepare_pipeline(
+                    pipeline_id=run.pipeline_id,
+                    revision=run.revision,
+                    network_allowed=bool(run.network_allowed),
+                )
+                run.provenance = {
+                    **dict(run.provenance or {}),
+                    "pipeline_cache": preparation,
+                }
+                await db.commit()
                 async with self._artifact_paths(db, run) as artifact_paths:
                     plan = await self._backend.build_plan(
                         run_id=run.id,

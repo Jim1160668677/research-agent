@@ -102,6 +102,7 @@ Add `-CreateInstaller` when Inno Setup's `ISCC.exe` is installed. The build is d
 - [Docking integration](docs/docking_integration.md)
 - [Multi-agent design](docs/multi_agent.md)
 - [Test report](docs/test_report.md)
+- [2026-08-14 recovery and full-function acceptance](docs/recovery_and_full_function_acceptance_20260814.md)
 - [Release notes](RELEASE_NOTES.md)
 
 ## Project layout

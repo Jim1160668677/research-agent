@@ -80,6 +80,20 @@ class ExecutionBackend(ABC):
     ) -> dict[str, Any]:
         raise NotImplementedError
 
+    async def prepare_pipeline(
+        self,
+        *,
+        pipeline_id: str,
+        revision: str,
+        network_allowed: bool,
+    ) -> dict[str, Any]:
+        """Prepare immutable backend assets before allocating compute.
+
+        Backends without external assets may keep this no-op implementation.
+        Implementations must not return credentials or physical cache paths.
+        """
+        return {"status": "not_required"}
+
     @abstractmethod
     async def build_plan(
         self,

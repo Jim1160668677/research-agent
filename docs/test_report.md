@@ -1,5 +1,11 @@
 # Verification report
 
+## 2026-08-14 recovery verification
+
+After restoring the complete local desktop/runtime assets, the exact repaired source baseline completed **259 passed, 0 failed**. The standard `dist\ResearchAgent\ResearchAgent.exe` build passed fresh-profile security, complete nine-stage research-flow, and deep WSL2/Nextflow/Docker preflight checks. A real pinned `nf-core/rnaseq@3.26.0` `test,docker` execution completed 234 tasks with no failures and produced 967 result files. The repaired executable SHA-256 is `7F326E2C285681A47AF82EDAE6DA144CE235858E7E2E9EDE2B72BA51C25F9B30`.
+
+The new pipeline-cache acceptance path pins the upstream commit, uses Windows Git for network prefetch, disables CRLF conversion, enables Windows long paths, compares every tracked worktree file with its raw Git blob, and only activates a verified candidate. Full evidence and the problem/fix matrix are in [the recovery and full-function acceptance report](recovery_and_full_function_acceptance_20260814.md).
+
 Date: 2026-08-13
 
 ## P4 final verification — Research Agent 1.3.0

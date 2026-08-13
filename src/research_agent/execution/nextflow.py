@@ -11,6 +11,7 @@ import re
 import shutil
 import signal
 import subprocess
+import uuid
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,6 +27,7 @@ PIPELINES: dict[str, dict[str, Any]] = {
         "title": "nf-core/rnaseq",
         "description": "RNA-seq alignment, quantification and quality-control pipeline.",
         "revision": "3.26.0",
+        "commit_sha": "e7ca46272c8f9d5ceee3f71759f4ba551d3217a4",
         "minimum_nextflow": "25.04.3",
         "source_url": "https://github.com/nf-core/rnaseq",
         "artifact_parameters": {
@@ -55,6 +57,7 @@ PIPELINES: dict[str, dict[str, Any]] = {
         "title": "nf-core/sarek",
         "description": "Germline and somatic variant calling and annotation pipeline.",
         "revision": "3.9.0",
+        "commit_sha": "b97952e5bac68d5deb93d4a3349a45f146be9830",
         "minimum_nextflow": "25.10.2",
         "source_url": "https://github.com/nf-core/sarek",
         "artifact_parameters": {
@@ -184,6 +187,7 @@ def pipeline_catalog() -> list[dict[str, Any]]:
             "title": item["title"],
             "description": item["description"],
             "revision": item["revision"],
+            "commit_sha": item["commit_sha"],
             "minimum_nextflow": item["minimum_nextflow"],
             "nextflow_version": NEXTFLOW_VERSION,
             "source_url": item["source_url"],
@@ -558,6 +562,298 @@ class NextflowBackend(ExecutionBackend):
         self.root = (root or (_data_root() / "pipeline-runs")).resolve()
         self.root.mkdir(parents=True, exist_ok=True)
 
+    def _pipeline_asset(self, pipeline_id: str) -> Path:
+        if pipeline_id not in PIPELINES:
+            raise ValueError("Pipeline is not in the administrator allowlist")
+        asset = (self.root / "nextflow-home" / "assets" / Path(*pipeline_id.split("/"))).resolve()
+        assets_root = (self.root / "nextflow-home" / "assets").resolve()
+        if not asset.is_relative_to(assets_root):
+            raise ValueError("Pipeline cache escaped the managed asset root")
+        return asset
+
+    async def _run_git(
+        self,
+        *arguments: str,
+        cwd: Path | None = None,
+        timeout: float = 600,
+    ) -> bytes:
+        executable = shutil.which("git")
+        if not executable:
+            raise RuntimeError(
+                "Git for Windows is required to prefetch a fixed pipeline revision"
+            )
+        environment = os.environ.copy()
+        environment.update(
+            {
+                "GIT_TERMINAL_PROMPT": "0",
+                "GIT_LFS_SKIP_SMUDGE": "1",
+            }
+        )
+        kwargs: dict[str, Any] = {}
+        if os.name == "nt":
+            kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            kwargs["start_new_session"] = True
+        process = await asyncio.create_subprocess_exec(
+            executable,
+            *arguments,
+            cwd=str(cwd) if cwd else None,
+            env=environment,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            **kwargs,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+        except asyncio.TimeoutError as exc:
+            process.kill()
+            await process.wait()
+            raise RuntimeError("Timed out while preparing the fixed pipeline cache") from exc
+        if process.returncode != 0:
+            detail = (stderr or stdout).decode("utf-8", errors="replace").strip()
+            raise RuntimeError(
+                "Git pipeline cache operation failed: " + (detail[-1000:] or "unknown error")
+            )
+        return stdout
+
+    async def _inspect_pipeline_cache(
+        self, pipeline_id: str, revision: str
+    ) -> dict[str, Any]:
+        spec = PIPELINES.get(pipeline_id)
+        if spec is None:
+            return {"ready": False, "status": "invalid", "error": "Pipeline is not allowlisted"}
+        if revision != spec["revision"]:
+            return {
+                "ready": False,
+                "status": "invalid",
+                "error": f"Only the pinned revision {spec['revision']} is allowed",
+            }
+        asset = self._pipeline_asset(pipeline_id)
+        public = {
+            "pipeline": pipeline_id,
+            "revision": revision,
+            "commit_sha": spec["commit_sha"],
+            "source_url": spec["source_url"],
+        }
+        if not asset.is_dir():
+            return {**public, "ready": False, "status": "missing"}
+        try:
+            head = (
+                await self._run_git("-C", str(asset), "rev-parse", "HEAD", timeout=30)
+            ).decode("ascii", errors="strict").strip()
+            tag_commit = (
+                await self._run_git(
+                    "-C",
+                    str(asset),
+                    "rev-parse",
+                    f"refs/tags/{revision}^{{commit}}",
+                    timeout=30,
+                )
+            ).decode("ascii", errors="strict").strip()
+            if head != spec["commit_sha"] or tag_commit != spec["commit_sha"]:
+                raise RuntimeError("Cached pipeline does not match the pinned commit")
+            status = await self._run_git(
+                "-C",
+                str(asset),
+                "status",
+                "--porcelain=v1",
+                "--untracked-files=all",
+                timeout=60,
+            )
+            if status.strip():
+                preview = status.decode("utf-8", errors="replace").strip()[:300]
+                raise RuntimeError(
+                    "Cached pipeline worktree contains unverified changes: " + preview
+                )
+            await self._verify_worktree_blobs(asset, "Cached pipeline")
+        except (OSError, RuntimeError, UnicodeError) as exc:
+            return {**public, "ready": False, "status": "invalid", "error": str(exc)[:500]}
+        return {**public, "ready": True, "status": "verified"}
+
+    async def prepare_pipeline(
+        self,
+        *,
+        pipeline_id: str,
+        revision: str,
+        network_allowed: bool,
+    ) -> dict[str, Any]:
+        """Atomically prefetch one allowlisted pipeline on the Windows network plane.
+
+        Git for Windows can use the desktop proxy even when a WSL NAT guest cannot.
+        The checkout is detached at an exact commit, materialized with LF line endings,
+        verified before activation, and never exposes proxy credentials in the plan.
+        """
+        state = await self._inspect_pipeline_cache(pipeline_id, revision)
+        if state.get("ready"):
+            return state
+        if not network_allowed:
+            raise RuntimeError(
+                "Offline execution requires a verified, previously cached pipeline revision"
+            )
+        spec = PIPELINES.get(pipeline_id)
+        if spec is None or revision != spec["revision"]:
+            raise ValueError("Pipeline revision is not in the administrator allowlist")
+        if not shutil.which("git"):
+            raise RuntimeError(
+                "Git for Windows is required to securely prefetch the fixed pipeline revision"
+            )
+        asset = self._pipeline_asset(pipeline_id)
+        asset.parent.mkdir(parents=True, exist_ok=True)
+        staging = asset.parent / f".{asset.name}.staging-{uuid.uuid4().hex}"
+        source = spec["source_url"].rstrip("/") + ".git"
+        backup: Path | None = None
+        try:
+            await self._run_git(
+                "-c",
+                "core.autocrlf=false",
+                "-c",
+                "core.eol=lf",
+                "-c",
+                "core.longpaths=true",
+                "clone",
+                "--filter=blob:none",
+                "--no-checkout",
+                source,
+                str(staging),
+            )
+            await self._run_git("-C", str(staging), "config", "core.autocrlf", "false")
+            await self._run_git("-C", str(staging), "config", "core.eol", "lf")
+            await self._run_git("-C", str(staging), "config", "core.safecrlf", "true")
+            await self._run_git("-C", str(staging), "config", "core.longpaths", "true")
+            await self._run_git(
+                "-C", str(staging), "checkout", "--detach", spec["commit_sha"]
+            )
+            staged_state = await self._inspect_pipeline_cache_at(
+                staging, pipeline_id, revision
+            )
+            if not staged_state.get("ready"):
+                raise RuntimeError(str(staged_state.get("error") or "Pipeline verification failed"))
+            if asset.exists():
+                timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+                backup = asset.parent / f"{asset.name}.invalid-{timestamp}-{uuid.uuid4().hex[:8]}"
+                asset.rename(backup)
+            try:
+                staging.rename(asset)
+            except Exception:
+                if backup is not None and backup.exists() and not asset.exists():
+                    backup.rename(asset)
+                raise
+            activated = await self._inspect_pipeline_cache(pipeline_id, revision)
+            if not activated.get("ready"):
+                rejected = asset.parent / (
+                    f"{asset.name}.rejected-{uuid.uuid4().hex[:8]}"
+                )
+                asset.rename(rejected)
+                if backup is not None and backup.exists():
+                    backup.rename(asset)
+                raise RuntimeError(
+                    str(activated.get("error") or "Activated pipeline cache failed verification")
+                )
+            return {**activated, "status": "downloaded_and_verified"}
+        finally:
+            # Preserve a failed staging tree intact for diagnosis. Successful
+            # activation renames it to the final asset path, so nothing remains.
+            # A later successful attempt uses a fresh UUID and never overwrites it.
+            pass
+
+    async def _inspect_pipeline_cache_at(
+        self, asset: Path, pipeline_id: str, revision: str
+    ) -> dict[str, Any]:
+        """Verify a staging checkout by temporarily applying the normal cache checks."""
+        expected = self._pipeline_asset(pipeline_id)
+        if asset.resolve() == expected:
+            return await self._inspect_pipeline_cache(pipeline_id, revision)
+        spec = PIPELINES[pipeline_id]
+        try:
+            head = (
+                await self._run_git("-C", str(asset), "rev-parse", "HEAD", timeout=30)
+            ).decode("ascii", errors="strict").strip()
+            tag_commit = (
+                await self._run_git(
+                    "-C",
+                    str(asset),
+                    "rev-parse",
+                    f"refs/tags/{revision}^{{commit}}",
+                    timeout=30,
+                )
+            ).decode("ascii", errors="strict").strip()
+            if head != spec["commit_sha"] or tag_commit != spec["commit_sha"]:
+                raise RuntimeError("Downloaded pipeline does not match the pinned commit")
+            status = await self._run_git(
+                "-C", str(asset), "status", "--porcelain=v1", "--untracked-files=all", timeout=60
+            )
+            if status.strip():
+                preview = status.decode("utf-8", errors="replace").strip()[:300]
+                raise RuntimeError(
+                    "Downloaded pipeline contains unverified changes: " + preview
+                )
+            await self._verify_worktree_blobs(asset, "Downloaded pipeline")
+        except (OSError, RuntimeError, UnicodeError) as exc:
+            return {"ready": False, "status": "invalid", "error": str(exc)[:500]}
+        return {"ready": True, "status": "verified"}
+
+    async def _verify_worktree_blobs(self, asset: Path, label: str) -> None:
+        """Prove every regular worktree file matches the pinned Git object.
+
+        Git reads the files so Windows long paths remain supported. Passing raw
+        path bytes through stdin avoids shell parsing and PowerShell encoding.
+        """
+        index = await self._run_git(
+            "-C", str(asset), "ls-files", "-s", "-z", timeout=60
+        )
+        paths: list[bytes] = []
+        expected: list[str] = []
+        for entry in index.split(b"\0"):
+            if not entry:
+                continue
+            try:
+                metadata, path = entry.split(b"\t", 1)
+                mode, sha, stage = metadata.split(b" ")
+            except ValueError as exc:
+                raise RuntimeError(f"{label} returned an invalid Git index entry") from exc
+            if mode not in {b"100644", b"100755"} or stage != b"0":
+                raise RuntimeError(f"{label} contains an unsupported Git object mode")
+            if not path or b"\n" in path or b"\r" in path or b"\0" in path:
+                raise RuntimeError(f"{label} contains an unsafe tracked filename")
+            paths.append(path)
+            expected.append(sha.decode("ascii", errors="strict"))
+        if not paths:
+            raise RuntimeError(f"{label} contains no tracked files")
+        executable = shutil.which("git")
+        if not executable:
+            raise RuntimeError("Git for Windows is unavailable during pipeline verification")
+        process = await asyncio.create_subprocess_exec(
+            executable,
+            "-C",
+            str(asset),
+            "hash-object",
+            "--no-filters",
+            "--stdin-paths",
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(b"\n".join(paths) + b"\n"), timeout=120
+            )
+        except asyncio.TimeoutError as exc:
+            process.kill()
+            await process.wait()
+            raise RuntimeError(f"{label} blob verification timed out") from exc
+        if process.returncode != 0:
+            detail = stderr.decode("utf-8", errors="replace").strip()
+            raise RuntimeError(f"{label} blob verification failed: {detail[-500:]}")
+        actual = stdout.decode("ascii", errors="strict").splitlines()
+        if len(actual) != len(expected):
+            raise RuntimeError(f"{label} blob verification returned an incomplete result")
+        mismatches = sum(left != right for left, right in zip(expected, actual, strict=True))
+        if mismatches:
+            raise RuntimeError(
+                f"{label} differs from the pinned commit in {mismatches} tracked file(s)"
+            )
+
     def _command(self, executable: str, *args: str) -> list[str]:
         if self.transport == "wsl2":
             return [
@@ -751,11 +1047,23 @@ class NextflowBackend(ExecutionBackend):
             issues.append("The managed pipeline workspace has less than 5 GiB free")
         elif free_bytes < 50 * 1024**3:
             warnings.append("The managed pipeline workspace has less than 50 GiB free")
-        if not network_allowed and spec:
-            asset = self.root / "nextflow-home" / "assets" / Path(*pipeline_id.split("/"))
-            if not asset.exists():
-                issues.append("Offline execution requires a previously cached pipeline revision")
-            else:
+        cache_state = None
+        if spec:
+            cache_state = await self._inspect_pipeline_cache(pipeline_id, revision)
+            if not cache_state.get("ready"):
+                if not network_allowed:
+                    issues.append(
+                        "Offline execution requires a verified, previously cached pipeline revision"
+                    )
+                elif not shutil.which("git"):
+                    issues.append(
+                        "Git for Windows is required to securely prefetch the fixed pipeline revision"
+                    )
+                else:
+                    warnings.append(
+                        "The fixed pipeline revision will be downloaded and verified before execution"
+                    )
+            elif not network_allowed:
                 warnings.append(
                     "Container and reference caches cannot be proven complete before execution"
                 )
@@ -771,6 +1079,7 @@ class NextflowBackend(ExecutionBackend):
             "capabilities": capabilities,
             "workspace_free_bytes": free_bytes,
             "wsl_work_free_bytes": wsl_work_free_bytes,
+            "pipeline_cache": cache_state,
         }
 
     def resolve_artifact(self, user_id: int, run_id: str, relative_path: str) -> Path:
