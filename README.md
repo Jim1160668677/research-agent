@@ -99,6 +99,7 @@ Add `-CreateInstaller` when Inno Setup's `ISCC.exe` is installed. The build is d
 - [Desktop user guide](docs/user_manual.md)
 - [LLM setup](docs/llm_setup.md)
 - [Plugin market](docs/plugin_market.md)
+- [Competitive evaluation (PantheonOS / Biomni)](docs/evaluation.md)
 - [Docking integration](docs/docking_integration.md)
 - [Multi-agent design](docs/multi_agent.md)
 - [Test report](docs/test_report.md)
