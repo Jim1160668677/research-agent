@@ -56,12 +56,12 @@
 
 ## 4. 边界与未验收项
 
-- **真实黄金数据执行**：`nf-core/rnaseq@3.26.0` `test,docker` 的端到端运行需要 WSL2 发行版 + 兼容 Nextflow + Docker Desktop（外部依赖），本机未具备；T2 以 Fake 后端契约测试替代，handler 与制品/证据回传路径已测。真实执行仍可走既有「生产流程」页（2026-08-14 曾完成 234-task 全零失败运行）。
-- 冒烟评测仅 seed 三个工具的 `--version` 用例；扩展断言型用例（如 `expect_stdout` 正则、真实样本输入）留待 RA-Eval v2。
-- 存量 lint：全仓历史遗留 1169 个 ruff 错误（import 排序等），与本次改动无关，未纳入本 P0 范围。
+- **真实黄金数据执行**：`nf-core/rnaseq@3.26.0` `test,docker` 的端到端运行需要 WSL2 发行版 + 兼容 Nextflow + Docker Desktop + **可访问 GitHub 的网络**。本机环境已齐备（WSL2 Ubuntu、Docker 29.5.3、Nextflow 26.04.6），但 GitHub 在 Windows 与 WSL2 内均间歇性不可达（curl 返回 000 / connect failed），无法拉取 nf-core 仓库与 docker 镜像。2026-08-16 验证 stub 模式时失败；以 Fake 后端契约测试替代（见 §3）。待网络恢复后执行完整流程并补录。
+- 冒烟评测仅 seed 三个工具的 `--version` 用例；扩展断言型用例（如 `expect_stdout` 正则、真实样本输入）见 RA-Eval v2（已完成）。
+- 存量 lint：全仓历史遗留 1169 个 ruff 错误已修复（1192 项），剩余 9 个为 FastAPI 惯例/有意写法，已在 `pyproject.toml` 的 ignore 中声明。
 
 ## 5. 后续建议
 
 1. 接入真实 WSL2/Nextflow 后执行 P0 黄金数据端到端验收并补录本文档。
-2. 全仓 ruff 清理（1081 项可自动修复，需一次性提交）。
-3. git 全局 `http.proxy` 仍指向已失效的 127.0.0.1:7890，后续推送需 `-c http.proxy=""`（或清理全局配置）。
+2. 全仓 ruff 清理已完成（1192 项修复，剩余 9 项为 FastAPI/有意写法已 add ignore）。
+3. git 全局 `http.proxy` 已清理；推送依赖直连 443（间歇可用）。
