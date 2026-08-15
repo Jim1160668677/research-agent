@@ -13,6 +13,10 @@ The complete Python suite now collects **291 tests** and completes with **291 pa
 
 `ruff check` is clean across `src/` and `tests/`. Frontend: the production Vue build covers the new HealthCheck view, the brief-download button, and the smoke-run button.
 
+### Packaged desktop build (P0)
+
+`scripts/build_desktop.ps1` rebuilt the onedir distribution: `dist\ResearchAgent\ResearchAgent.exe` (39,632,148 bytes, SHA-256 `6BD6A35678BD634D41DA819BA36BE8F6D61E282271A9C2856CFE1C4351056F34`). The bundled interface includes the health-check client code; a fresh black-box launch reported `/health` 200 on its loopback port and `/api/v1/system/health-check` 401 unauthenticated (security boundary intact).
+
 ## 2026-08-14 recovery verification
 
 After restoring the complete local desktop/runtime assets, the exact repaired source baseline completed **259 passed, 0 failed**. The standard `dist\ResearchAgent\ResearchAgent.exe` build passed fresh-profile security, complete nine-stage research-flow, and deep WSL2/Nextflow/Docker preflight checks. A real pinned `nf-core/rnaseq@3.26.0` `test,docker` execution completed 234 tasks with no failures and produced 967 result files. The repaired executable SHA-256 is `7F326E2C285681A47AF82EDAE6DA144CE235858E7E2E9EDE2B72BA51C25F9B30`.
