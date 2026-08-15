@@ -11,7 +11,7 @@
 | T3 | 研究简报自动生成（Markdown/HTML/PDF） | P0 | 已完成 | POST /research/runs/{id}/report 生成并下载；模板聚合目标/证据/统计/缺口；270 测试全绿 |
 | T4 | RA-Eval v1：插件任务级冒烟评测 | P0 | 已完成 | seed 冒烟定义；执行 API；历史记录；插件 62 测试全绿 |
 | T5 | 环境体检向导（前端 + 聚合后端） | P0 | 已完成 | GET /system/health-check 聚合；HealthCheck.vue 向导视图；291 测试全绿 |
-| T6 | 全量测试 + 文档更新 + GitHub 推送 | P0 | 进行中 | 259+ 测试全绿；README/docs 更新；推送 main |
+| T6 | 全量测试 + 文档更新 + GitHub 推送 | P0 | 已完成 | 291 测试全绿；README/docs 更新；推送 main（d751ddd） |
 
 ## 2. T2 设计（核心：pipeline_execution 能力步骤）
 
