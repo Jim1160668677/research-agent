@@ -5,9 +5,7 @@
       每个测试使用独立的临时数据库，状态完全隔离。
 """
 
-import os
 import pytest
-from pathlib import Path
 from fastapi.testclient import TestClient
 
 
@@ -83,6 +81,7 @@ def real_client(tmp_path, monkeypatch, request):
     monkeypatch.setenv("debug", "false")
 
     import importlib
+
     import research_agent.core.db as db_module
     from research_agent.core.app import settings
     settings.database_url = test_db_url

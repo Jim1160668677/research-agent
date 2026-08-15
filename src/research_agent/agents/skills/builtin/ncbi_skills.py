@@ -1,7 +1,8 @@
 """NCBI检索技能 - 封装NCBI数据库操作"""
 
-from typing import Dict, List, Any
-from ..base import BaseSkill, SkillParameter, SkillOutput
+from typing import Any
+
+from ..base import BaseSkill, SkillOutput, SkillParameter
 
 
 class PubmedSearchSkill(BaseSkill):
@@ -26,7 +27,7 @@ class PubmedSearchSkill(BaseSkill):
             timeout_seconds=50,
         )
 
-    async def execute(self, **kwargs) -> Dict[str, Any]:
+    async def execute(self, **kwargs) -> dict[str, Any]:
         from ....ncbi_skills.adapter import get_ncbi_adapter
         adapter = get_ncbi_adapter()
         results = await adapter.pubmed_search(
@@ -58,7 +59,7 @@ class SraSearchSkill(BaseSkill):
             timeout_seconds=50,
         )
 
-    async def execute(self, **kwargs) -> Dict[str, Any]:
+    async def execute(self, **kwargs) -> dict[str, Any]:
         from ....ncbi_skills.adapter import get_ncbi_adapter
         adapter = get_ncbi_adapter()
         results = await adapter.sra_search(
@@ -87,7 +88,7 @@ class GenBankFetchSkill(BaseSkill):
             ],
         )
 
-    async def execute(self, **kwargs) -> Dict[str, Any]:
+    async def execute(self, **kwargs) -> dict[str, Any]:
         from ....ncbi_skills.adapter import get_ncbi_adapter
         adapter = get_ncbi_adapter()
         record = await adapter.genbank_fetch(kwargs["accession"])
@@ -117,7 +118,7 @@ class BlastSearchSkill(BaseSkill):
             ],
         )
 
-    async def execute(self, **kwargs) -> Dict[str, Any]:
+    async def execute(self, **kwargs) -> dict[str, Any]:
         from ....ncbi_skills.adapter import get_ncbi_adapter
         adapter = get_ncbi_adapter()
         result = await adapter.blast_search(
@@ -146,7 +147,7 @@ class GeneSearchSkill(BaseSkill):
             timeout_seconds=50,
         )
 
-    async def execute(self, **kwargs) -> Dict[str, Any]:
+    async def execute(self, **kwargs) -> dict[str, Any]:
         from ....ncbi_skills.adapter import get_ncbi_adapter
         adapter = get_ncbi_adapter()
         results = await adapter.gene_search(
@@ -174,7 +175,7 @@ class EntrezLinkSkill(BaseSkill):
             timeout_seconds=50,
         )
 
-    async def execute(self, **kwargs) -> Dict[str, Any]:
+    async def execute(self, **kwargs) -> dict[str, Any]:
         from ....ncbi_skills.adapter import get_ncbi_adapter
         adapter = get_ncbi_adapter()
         links = await adapter.link_datasets(

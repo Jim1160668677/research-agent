@@ -11,8 +11,9 @@ import shutil
 import signal
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any
 
 from sqlalchemy import select, update
 
@@ -39,7 +40,7 @@ class DeployResult:
         plugin_id: int,
         name: str,
         ok: bool,
-        steps: List[Dict[str, Any]],
+        steps: list[dict[str, Any]],
         message: str = "",
         deployed_version: str = "",
         is_simulated: bool = True,
@@ -56,7 +57,7 @@ class DeployResult:
         self.requires_manual_download = requires_manual_download
         self.environment_prefix = environment_prefix
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "plugin_id": self.plugin_id,
             "name": self.name,
@@ -77,7 +78,7 @@ class Deployer:
     _SAFE_CHANNEL = re.compile(r"^[A-Za-z0-9_.:/-]{1,200}$")
     _SAFE_SPEC = re.compile(r"^[A-Za-z0-9_.:+*<>=!~\-\[\],@/]{1,500}$")
 
-    def __init__(self, db_session, user_id: Optional[int] = None):
+    def __init__(self, db_session, user_id: int | None = None):
         self.db = db_session
         self.user_id = user_id
         self.os_name = platform.system().lower()
@@ -97,7 +98,7 @@ class Deployer:
     def current_os(self) -> str:
         return {"windows": "windows", "darwin": "macos"}.get(self.os_name, "linux")
 
-    def is_supported(self, os_list: List[str]) -> Tuple[bool, str]:
+    def is_supported(self, os_list: list[str]) -> tuple[bool, str]:
         current = self.current_os()
         normalized = [item.lower() for item in (os_list or []) if item]
         if not normalized:
@@ -107,7 +108,7 @@ class Deployer:
                 return True, f"支持当前平台 {current}"
         return False, f"不支持当前平台 {current}；支持: {', '.join(normalized)}"
 
-    def tools_available(self) -> Dict[str, bool]:
+    def tools_available(self) -> dict[str, bool]:
         return {
             "micromamba": shutil.which("micromamba") is not None,
             "mamba": shutil.which("mamba") is not None,
@@ -133,13 +134,13 @@ class Deployer:
             raise ValueError(f"Invalid {label} in plugin catalog")
         return value
 
-    def build_plan(self, plugin: Plugin) -> Dict[str, Any]:
+    def build_plan(self, plugin: Plugin) -> dict[str, Any]:
         method = plugin.install_method or {}
         method_name = str(method.get("method", "manual")).lower()
         supported, support_reason = self.is_supported(plugin.os_compatibility or [])
         tools = self.tools_available()
         prefix = self._environment_prefix(plugin)
-        steps: List[Dict[str, Any]] = []
+        steps: list[dict[str, Any]] = []
         plan = {
             "method": method_name,
             "supported": supported,
@@ -180,7 +181,7 @@ class Deployer:
                 channels = method.get("channels") or [method.get("channel", "conda-forge")]
                 if isinstance(channels, str):
                     channels = [channels]
-                channel_args: List[str] = []
+                channel_args: list[str] = []
                 for channel in channels:
                     channel = str(channel).strip()
                     if not self._SAFE_CHANNEL.fullmatch(channel):
@@ -276,7 +277,7 @@ class Deployer:
 
     async def deploy(self, plugin: Plugin, simulate: bool = False) -> DeployResult:
         plan = self.build_plan(plugin)
-        completed_steps: List[Dict[str, Any]] = []
+        completed_steps: list[dict[str, Any]] = []
         prefix = Path(plan["environment_prefix"])
         ok = bool(plan["supported"])
         if not simulate:
@@ -373,10 +374,10 @@ class Deployer:
         self,
         argv: Sequence[str],
         timeout: int = 60,
-    ) -> Tuple[int, str, str]:
+    ) -> tuple[int, str, str]:
         if not argv or not all(isinstance(item, str) and item for item in argv):
             return 1, "", "no executable argv"
-        kwargs: Dict[str, Any] = {
+        kwargs: dict[str, Any] = {
             "stdout": asyncio.subprocess.PIPE,
             "stderr": asyncio.subprocess.PIPE,
         }
@@ -486,7 +487,7 @@ class Deployer:
         )
         await self.db.commit()
 
-    async def remove_environment(self, plugin: Plugin) -> Dict[str, Any]:
+    async def remove_environment(self, plugin: Plugin) -> dict[str, Any]:
         """Remove only the isolated environment recorded for this user."""
         installation = await latest_installation(self.db, plugin.id, self.user_id)
         if not installation or installation.status not in INSTALLED_STATES | {ERROR}:
@@ -521,7 +522,7 @@ class Deployer:
             "removed": removed,
         }
 
-    async def verify_installation(self, plugin: Plugin) -> Dict[str, Any]:
+    async def verify_installation(self, plugin: Plugin) -> dict[str, Any]:
         method = plugin.install_method or {}
         installation = await latest_installation(self.db, plugin.id, self.user_id)
         if not installation or installation.status not in {
@@ -539,7 +540,7 @@ class Deployer:
         probe = method.get("probe") or {}
         command = str(probe.get("command") or method.get("executable") or plugin.name)
         args = [str(item) for item in probe.get("args", ["--version"])]
-        argv: List[str]
+        argv: list[str]
         if not prefix or not prefix.exists():
             message = "deployed environment is missing"
             await transition(
@@ -610,7 +611,7 @@ class Deployer:
         self,
         plugin_id: int,
         limit: int = 10,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         query = select(PluginInstallation).where(PluginInstallation.plugin_id == plugin_id)
         if self.user_id is not None:
             query = query.where(PluginInstallation.user_id == self.user_id)

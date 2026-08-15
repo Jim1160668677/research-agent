@@ -1,13 +1,10 @@
 """技能系统测试"""
 
-import sys
 import pytest
+
 from research_agent.agents.skills import (
-    SkillRegistry,
     SkillExecutor,
-    BaseSkill,
-    SkillParameter,
-    SkillResult,
+    SkillRegistry,
     initialize_builtin_skills,
 )
 
@@ -41,7 +38,7 @@ def test_builtin_skills_registered(registry):
 def test_skill_categories(registry):
     """测试技能分类"""
     skills = registry.list_all()
-    categories = set(s["category"] for s in skills.values())
+    categories = {s["category"] for s in skills.values()}
     assert "genomics" in categories
     assert "literature" in categories
     assert "statistics" in categories

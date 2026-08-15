@@ -6,8 +6,9 @@ import hashlib
 import json
 import math
 import re
+from collections.abc import Iterable
 from datetime import datetime
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any
 
 from sqlalchemy import or_, select
 
@@ -34,7 +35,7 @@ def _tokens(value: Any) -> set[str]:
 def _flatten(value: Any) -> str:
     if value is None:
         return ""
-    if isinstance(value, (list, tuple, set)):
+    if isinstance(value, list | tuple | set):
         return " ".join(_flatten(item) for item in value)
     if isinstance(value, dict):
         return " ".join(f"{key} {_flatten(item)}" for key, item in value.items())
@@ -44,7 +45,7 @@ def _flatten(value: Any) -> str:
 class RecommendationEngine:
     """Rank real skills, plugins and workflows using context and user history."""
 
-    _CATEGORY_PRIORS: Dict[str, Dict[str, float]] = {
+    _CATEGORY_PRIORS: dict[str, dict[str, float]] = {
         "literature_search": {
             "literature": 0.62,
             "writing": 0.24,
@@ -75,7 +76,7 @@ class RecommendationEngine:
         user_id: int,
         context_type: str = "general",
         limit: int = 5,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         result = await self.db.execute(
             select(Recommendation)
             .where(
@@ -91,9 +92,9 @@ class RecommendationEngine:
         self,
         user_id: int,
         context_type: str,
-        context_data: Dict[str, Any],
+        context_data: dict[str, Any],
         limit: int = 5,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         context_type = (context_type or "general").strip().lower()
         limit = max(1, min(int(limit), 20))
         profile = await self._get_profile(user_id)
@@ -132,7 +133,7 @@ class RecommendationEngine:
         await self.db.refresh(record)
         return self._item_to_dict(record)
 
-    async def get_history(self, user_id: int, limit: int = 20) -> List[Dict[str, Any]]:
+    async def get_history(self, user_id: int, limit: int = 20) -> list[dict[str, Any]]:
         result = await self.db.execute(
             select(Recommendation)
             .where(Recommendation.user_id == user_id)
@@ -148,7 +149,7 @@ class RecommendationEngine:
         item_type: str,
         item_name: str,
         accepted: bool,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         if item_type not in {"skill", "plugin", "workflow"}:
             raise ValueError("item_type must be skill, plugin or workflow")
         item_name = item_name.strip()
@@ -168,7 +169,7 @@ class RecommendationEngine:
         await self.db.commit()
         return {"item_key": key, **stats}
 
-    async def _get_profile(self, user_id: int, create: bool = False) -> Optional[UserProfile]:
+    async def _get_profile(self, user_id: int, create: bool = False) -> UserProfile | None:
         result = await self.db.execute(
             select(UserProfile)
             .where(UserProfile.user_id == user_id)
@@ -181,7 +182,7 @@ class RecommendationEngine:
             await self.db.flush()
         return profile
 
-    async def _history_signals(self, user_id: int) -> Dict[str, Any]:
+    async def _history_signals(self, user_id: int) -> dict[str, Any]:
         installation_result = await self.db.execute(
             select(PluginInstallation.plugin_id).where(
                 PluginInstallation.user_id == user_id,
@@ -196,7 +197,7 @@ class RecommendationEngine:
             .order_by(WorkflowRun.created_at.desc())
             .limit(200)
         )
-        workflow_runs: Dict[int, int] = {}
+        workflow_runs: dict[int, int] = {}
         for workflow_id in run_result.scalars().all():
             workflow_runs[int(workflow_id)] = workflow_runs.get(int(workflow_id), 0) + 1
         return {
@@ -207,10 +208,10 @@ class RecommendationEngine:
     async def _load_candidates(
         self,
         user_id: int,
-        history: Dict[str, Any],
-    ) -> List[Dict[str, Any]]:
+        history: dict[str, Any],
+    ) -> list[dict[str, Any]]:
         SkillRegistry.initialize_builtin()
-        candidates: List[Dict[str, Any]] = []
+        candidates: list[dict[str, Any]] = []
         for name, metadata in SkillRegistry.list_all().items():
             candidates.append(
                 {
@@ -267,19 +268,19 @@ class RecommendationEngine:
 
     def _rank_candidates(
         self,
-        candidates: Iterable[Dict[str, Any]],
+        candidates: Iterable[dict[str, Any]],
         *,
         context_type: str,
-        context_data: Dict[str, Any],
-        profile: Optional[UserProfile],
-        history: Dict[str, Any],
-    ) -> List[Dict[str, Any]]:
+        context_data: dict[str, Any],
+        profile: UserProfile | None,
+        history: dict[str, Any],
+    ) -> list[dict[str, Any]]:
         priors = self._CATEGORY_PRIORS.get(context_type, self._CATEGORY_PRIORS["general"])
         context_tokens = _tokens({"context_type": context_type, **context_data})
         research_tokens = _tokens(profile.research_fields if profile else [])
         preferences = dict(profile.skill_preferences or {}) if profile else {}
         feedback = dict(preferences.get("recommendation_feedback") or {})
-        ranked: List[Dict[str, Any]] = []
+        ranked: list[dict[str, Any]] = []
 
         for original in candidates:
             item = dict(original)
@@ -293,7 +294,7 @@ class RecommendationEngine:
                 }
             )
             score = 0.08
-            reasons: List[str] = []
+            reasons: list[str] = []
             prior = priors.get(category, 0.0)
             if prior:
                 score += prior
@@ -331,7 +332,7 @@ class RecommendationEngine:
         return ranked
 
     @staticmethod
-    def _item_to_dict(item: Recommendation) -> Dict[str, Any]:
+    def _item_to_dict(item: Recommendation) -> dict[str, Any]:
         return {
             "id": item.id,
             "user_id": item.user_id,

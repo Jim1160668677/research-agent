@@ -1,7 +1,8 @@
 """科研辅助技能 - 文献分析、统计建模、数据可视化"""
 
-from typing import Dict, List, Any
-from ..base import BaseSkill, SkillParameter, SkillOutput
+from typing import Any
+
+from ..base import BaseSkill, SkillOutput, SkillParameter
 
 
 class LiteratureSummarySkill(BaseSkill):
@@ -23,7 +24,7 @@ class LiteratureSummarySkill(BaseSkill):
             risk_level="medium",
         )
 
-    async def execute(self, **kwargs) -> Dict[str, Any]:
+    async def execute(self, **kwargs) -> dict[str, Any]:
         pmids = kwargs["pmids"]
         return {
             "summary": "仅收到文献标识符，尚未取得摘要或全文，因此未生成事实性综述。",
@@ -49,7 +50,7 @@ class ExperimentalDesignSkill(BaseSkill):
             risk_level="medium",
         )
 
-    async def execute(self, **kwargs) -> Dict[str, Any]:
+    async def execute(self, **kwargs) -> dict[str, Any]:
         from ....research.services import experimental_design
 
         objective = kwargs["objective"]
@@ -84,7 +85,7 @@ class EvidenceSynthesisSkill(BaseSkill):
             risk_level="medium",
         )
 
-    async def execute(self, **kwargs) -> Dict[str, Any]:
+    async def execute(self, **kwargs) -> dict[str, Any]:
         from ....research.services import evidence_review
 
         result = await evidence_review({
@@ -109,7 +110,7 @@ class ResearchWritingSupportSkill(BaseSkill):
             risk_level="medium",
         )
 
-    async def execute(self, **kwargs) -> Dict[str, Any]:
+    async def execute(self, **kwargs) -> dict[str, Any]:
         from ....research.services import research_writing
 
         result = await research_writing({
@@ -135,7 +136,7 @@ class AcademicIntegrityCheckSkill(BaseSkill):
             risk_level="medium",
         )
 
-    async def execute(self, **kwargs) -> Dict[str, Any]:
+    async def execute(self, **kwargs) -> dict[str, Any]:
         from ....research.services import integrity_check
 
         result = await integrity_check({
@@ -169,9 +170,9 @@ class StatisticalTestSkill(BaseSkill):
             modalities=["table"],
         )
 
-    async def execute(self, **kwargs) -> Dict[str, Any]:
-        import scipy.stats as stats
+    async def execute(self, **kwargs) -> dict[str, Any]:
         import numpy as np
+        import scipy.stats as stats
 
         test = kwargs.get("test", "ttest")
         g1 = np.array(kwargs["group1"], dtype=float)
@@ -237,9 +238,9 @@ class CorrelationSkill(BaseSkill):
             modalities=["table"],
         )
 
-    async def execute(self, **kwargs) -> Dict[str, Any]:
-        import scipy.stats as stats
+    async def execute(self, **kwargs) -> dict[str, Any]:
         import numpy as np
+        import scipy.stats as stats
 
         x = np.array(kwargs["x"], dtype=float)
         y = np.array(kwargs["y"], dtype=float)
@@ -288,7 +289,7 @@ class VolcanoPlotSkill(BaseSkill):
             writes_files=True,
         )
 
-    async def execute(self, **kwargs) -> Dict[str, Any]:
+    async def execute(self, **kwargs) -> dict[str, Any]:
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
@@ -361,7 +362,7 @@ class HeatmapSkill(BaseSkill):
             writes_files=True,
         )
 
-    async def execute(self, **kwargs) -> Dict[str, Any]:
+    async def execute(self, **kwargs) -> dict[str, Any]:
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt

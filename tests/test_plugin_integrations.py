@@ -18,8 +18,8 @@ from research_agent.plugins.lifecycle import (
     latest_installation,
     transition,
 )
-from research_agent.plugins.manifest import CapabilityManifestV1, manifest_digest
 from research_agent.plugins.manager import PluginManager
+from research_agent.plugins.manifest import CapabilityManifestV1, manifest_digest
 from research_agent.plugins.platform_probe import _decode_output
 
 

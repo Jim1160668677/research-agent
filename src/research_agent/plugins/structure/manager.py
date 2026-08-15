@@ -1,28 +1,29 @@
 """蛋白质结构工具管理器"""
 
-from typing import Dict, List, Optional, Any
+from typing import Any
+
 from loguru import logger
 
-from .base import StructureTool, StructureJob
+from .base import StructureJob, StructureTool
 
 
 class StructureManager:
     """蛋白质结构工具管理器"""
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         """
         Args:
             config: 工具路径配置, 如
                 {"pymol": "pymol", "chimerax": "chimerax", "swiss_pdbviewer": "spdbv"}
         """
         self.config = config or {}
-        self._tools: Dict[str, StructureTool] = {}
+        self._tools: dict[str, StructureTool] = {}
         self._initialize_tools()
 
     def _initialize_tools(self):
         """初始化并检测所有结构工具"""
-        from .pymol_adapter import PyMOLTool
         from .chimerax_adapter import ChimeraXTool
+        from .pymol_adapter import PyMOLTool
         from .swiss_pdbviewer_adapter import SwissPdbViewerTool
 
         tool_classes = [PyMOLTool, ChimeraXTool, SwissPdbViewerTool]
@@ -36,11 +37,11 @@ class StructureManager:
             logger.info(f"结构工具 [{cls.name}]: {status}"
                         + (f" ({executable})" if executable else ""))
 
-    def list_tools(self) -> List[Dict[str, Any]]:
+    def list_tools(self) -> list[dict[str, Any]]:
         """列出所有工具及状态"""
         return [tool.to_dict() for tool in self._tools.values()]
 
-    def get_tool(self, name: str) -> Optional[StructureTool]:
+    def get_tool(self, name: str) -> StructureTool | None:
         """获取指定工具"""
         return self._tools.get(name)
 
@@ -48,10 +49,10 @@ class StructureManager:
         self,
         tool_name: str,
         pdb_path: str,
-        output_path: Optional[str] = None,
+        output_path: str | None = None,
         style: str = "cartoon",
-        extra_commands: List[str] = None,
-    ) -> Dict[str, Any]:
+        extra_commands: list[str] = None,
+    ) -> dict[str, Any]:
         """渲染结构"""
         import asyncio
         tool = self._tools.get(tool_name)
@@ -76,7 +77,7 @@ class StructureManager:
             return StructureJob(success=False, tool=tool_name, error=str(e)).to_dict()
 
 
-_manager: Optional[StructureManager] = None
+_manager: StructureManager | None = None
 
 
 def get_structure_manager() -> StructureManager:

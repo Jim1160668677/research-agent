@@ -7,13 +7,14 @@
 - 依赖解析入口
 """
 
-from typing import Dict, List, Optional, Any
 from datetime import datetime
-from loguru import logger
+from typing import Any
 
-from ..core.db import AsyncSession, get_db
-from ..core.models.db import Plugin, PluginInstallation, PluginVersion, PluginReview
-from sqlalchemy import select, update, delete, func
+from loguru import logger
+from sqlalchemy import delete, func, select, update
+
+from ..core.db import AsyncSession
+from ..core.models.db import Plugin, PluginInstallation, PluginReview, PluginVersion
 from .lifecycle import (
     DESELECTED,
     DISABLED,
@@ -30,7 +31,7 @@ from .lifecycle import (
 from .manifest import manifest_digest, validated_manifest_for_plugin
 
 
-def _latest_of(versions: List[Dict[str, Any]]) -> Optional[str]:
+def _latest_of(versions: list[dict[str, Any]]) -> str | None:
     """从版本历史中取最新版本 (优先 is_latest 标记, 否则取最后一个)"""
     if not versions:
         return None
@@ -42,10 +43,10 @@ def _latest_of(versions: List[Dict[str, Any]]) -> Optional[str]:
 
 class PluginManager:
     """插件管理器"""
-    
+
     def __init__(self, db_session: AsyncSession):
         self.db = db_session
-        self._plugin_cache: Dict[str, Plugin] = {}
+        self._plugin_cache: dict[str, Plugin] = {}
 
     @classmethod
     def initialize(cls):
@@ -56,14 +57,14 @@ class PluginManager:
 
     async def list_plugins(
         self,
-        category: Optional[str] = None,
-        status: Optional[str] = None,
-        search: Optional[str] = None,
-        sort: Optional[str] = None,
+        category: str | None = None,
+        status: str | None = None,
+        search: str | None = None,
+        sort: str | None = None,
         installed_only: bool = False,
         update_available_only: bool = False,
-        user_id: Optional[int] = None,
-    ) -> List[Dict]:
+        user_id: int | None = None,
+    ) -> list[dict]:
         """列出插件，支持搜索/分类/排序 (已优化: 批量预加载版本数据)
 
         sort: rating | downloads | name | newest | update
@@ -93,7 +94,7 @@ class PluginManager:
         result = await self.db.execute(query.order_by(order_col))
         plugins = result.scalars().all()
 
-        installations: Dict[int, PluginInstallation] = {}
+        installations: dict[int, PluginInstallation] = {}
         if user_id is not None and plugins:
             installation_result = await self.db.execute(
                 select(PluginInstallation)
@@ -127,7 +128,7 @@ class PluginManager:
 
         return items
 
-    async def _batch_load_versions(self, plugin_ids: List[int]) -> Dict[int, List[Dict]]:
+    async def _batch_load_versions(self, plugin_ids: list[int]) -> dict[int, list[dict]]:
         """批量加载多个插件的版本数据 (1次查询)"""
         if not plugin_ids:
             return {}
@@ -140,7 +141,7 @@ class PluginManager:
         all_versions = result.scalars().all()
 
         # 按 plugin_id 分组
-        versions_map: Dict[int, List[Dict]] = {}
+        versions_map: dict[int, list[dict]] = {}
         for v in all_versions:
             if v.plugin_id not in versions_map:
                 versions_map[v.plugin_id] = []
@@ -159,10 +160,10 @@ class PluginManager:
     def _plugin_to_dict_fast(
         self,
         plugin: Plugin,
-        versions: List[Dict],
-        installation: Optional[PluginInstallation] = None,
+        versions: list[dict],
+        installation: PluginInstallation | None = None,
         user_scoped: bool = False,
-    ) -> Dict:
+    ) -> dict:
         """优化版: 使用预加载版本数据构造插件字典"""
         market_latest = plugin.latest_version or _latest_of(versions) or plugin.version
 
@@ -211,8 +212,8 @@ class PluginManager:
         }
 
     async def get_plugin(
-        self, plugin_id: int, user_id: Optional[int] = None
-    ) -> Optional[Dict]:
+        self, plugin_id: int, user_id: int | None = None
+    ) -> dict | None:
         """获取插件详情 (含版本历史与评分摘要)"""
         result = await self.db.execute(select(Plugin).where(Plugin.id == plugin_id))
         plugin = result.scalar_one_or_none()
@@ -253,14 +254,14 @@ class PluginManager:
         return data
 
     async def get_plugin_by_name(
-        self, name: str, user_id: Optional[int] = None
-    ) -> Optional[Dict]:
+        self, name: str, user_id: int | None = None
+    ) -> dict | None:
         """按名称获取插件"""
         result = await self.db.execute(select(Plugin).where(Plugin.name == name))
         plugin = result.scalar_one_or_none()
         return await self.get_plugin(plugin.id, user_id=user_id) if plugin else None
 
-    async def search_plugins(self, query_str: str) -> List[Dict]:
+    async def search_plugins(self, query_str: str) -> list[dict]:
         """搜索插件 (名称/描述/标签)"""
         result = await self.db.execute(
             select(Plugin).where(
@@ -272,7 +273,7 @@ class PluginManager:
         plugins = result.scalars().all()
         return [await self._plugin_to_dict(p) for p in plugins]
 
-    async def list_categories(self) -> List[Dict[str, Any]]:
+    async def list_categories(self) -> list[dict[str, Any]]:
         """分类浏览: 分类名 + 计数"""
         result = await self.db.execute(
             select(Plugin.category, func.count(Plugin.id)).group_by(Plugin.category)
@@ -280,7 +281,7 @@ class PluginManager:
         rows = result.all()
         return [{"category": c, "count": n} for c, n in rows]
 
-    async def _plugin_to_dict(self, plugin: Plugin) -> Dict:
+    async def _plugin_to_dict(self, plugin: Plugin) -> dict:
         """插件转字典 (含市场信息)"""
         versions = None
         try:
@@ -330,7 +331,7 @@ class PluginManager:
 
     # ---------- 安装 / 卸载 ----------
 
-    async def _legacy_install_plugin(self, request: Dict[str, Any]) -> Dict:
+    async def _legacy_install_plugin(self, request: dict[str, Any]) -> dict:
         """安装插件 (保持兼容旧接口，标记已安装)"""
         plugin_id = request.get("plugin_id")
         config = request.get("config", {})
@@ -402,7 +403,7 @@ class PluginManager:
         data["status"] = "enabled"
         return data
 
-    async def select_plugin(self, request: Dict[str, Any]) -> Dict:
+    async def select_plugin(self, request: dict[str, Any]) -> dict:
         """Select a catalog entry without claiming software is deployed."""
         plugin_id = request.get("plugin_id")
         config = request.get("config", {})
@@ -444,7 +445,7 @@ class PluginManager:
         logger.info(f"Plugin selected: {plugin.name} v{selected_version}")
         return await self.get_plugin(plugin_id, user_id=user_id)
 
-    async def _legacy_uninstall_plugin(self, plugin_id: int, user_id: Optional[int] = None):
+    async def _legacy_uninstall_plugin(self, plugin_id: int, user_id: int | None = None):
         """卸载插件"""
         result = await self.db.execute(select(Plugin).where(Plugin.id == plugin_id))
         plugin = result.scalar_one_or_none()
@@ -485,8 +486,8 @@ class PluginManager:
         await self.db.refresh(plugin)
 
     async def deselect_plugin(
-        self, plugin_id: int, user_id: Optional[int] = None
-    ) -> Dict:
+        self, plugin_id: int, user_id: int | None = None
+    ) -> dict:
         """Remove a selection; physical environments require explicit removal."""
         plugin = await self.get_plugin(plugin_id, user_id=user_id)
         if not plugin:
@@ -509,8 +510,8 @@ class PluginManager:
         return await self.get_plugin(plugin_id, user_id=user_id)
 
     async def set_enabled(
-        self, plugin_id: int, user_id: Optional[int], enabled: bool
-    ) -> Dict:
+        self, plugin_id: int, user_id: int | None, enabled: bool
+    ) -> dict:
         current = await latest_installation(self.db, plugin_id, user_id)
         if not current:
             raise ValueError("Plugin has not been selected or deployed")
@@ -525,22 +526,22 @@ class PluginManager:
         await self.db.commit()
         return await self.get_plugin(plugin_id, user_id=user_id)
 
-    async def install_plugin(self, request: Dict[str, Any]) -> Dict:
+    async def install_plugin(self, request: dict[str, Any]) -> dict:
         """Compatibility alias: marketplace install now means selection only."""
         return await self.select_plugin(request)
 
     async def uninstall_plugin(
-        self, plugin_id: int, user_id: Optional[int] = None
-    ) -> Dict:
+        self, plugin_id: int, user_id: int | None = None
+    ) -> dict:
         """Compatibility alias: remove a marketplace selection only."""
         return await self.deselect_plugin(plugin_id, user_id=user_id)
 
     async def get_installed_plugins(
-        self, user_id: Optional[int] = None
-    ) -> List[Dict]:
+        self, user_id: int | None = None
+    ) -> list[dict]:
         """Return plugins backed by a deployed environment for this user."""
         latest_by_plugin = await latest_installations_for_user(self.db, user_id)
-        items: List[Dict] = []
+        items: list[dict] = []
         for plugin_id, installation in latest_by_plugin.items():
             if installation.status not in INSTALLED_STATES:
                 continue
@@ -549,7 +550,7 @@ class PluginManager:
                 items.append(plugin)
         return items
 
-    async def update_plugin(self, plugin_id: int, update_data: Dict) -> Optional[Dict]:
+    async def update_plugin(self, plugin_id: int, update_data: dict) -> dict | None:
         """更新插件"""
         result = await self.db.execute(select(Plugin).where(Plugin.id == plugin_id))
         plugin = result.scalar_one_or_none()
@@ -567,17 +568,17 @@ class PluginManager:
 
         return await self._plugin_to_dict(plugin)
 
-    async def _legacy_get_installed_plugins(self) -> List[Dict]:
+    async def _legacy_get_installed_plugins(self) -> list[dict]:
         """获取已安装插件"""
         result = await self.db.execute(
-            select(Plugin).where(Plugin.is_installed == True)
+            select(Plugin).where(Plugin.is_installed)
         )
         plugins = result.scalars().all()
         return [await self._plugin_to_dict(p) for p in plugins]
 
     # ---------- 版本控制 ----------
 
-    async def list_versions(self, plugin_id: int) -> List[Dict[str, Any]]:
+    async def list_versions(self, plugin_id: int) -> list[dict[str, Any]]:
         """获取插件版本历史"""
         result = await self.db.execute(
             select(PluginVersion)
@@ -596,7 +597,7 @@ class PluginManager:
             "is_active": bool(v.is_active),
         } for v in versions]
 
-    async def add_version(self, plugin_id: int, version_data: Dict) -> Optional[Dict]:
+    async def add_version(self, plugin_id: int, version_data: dict) -> dict | None:
         """注册一个新版本 (升级发布)"""
         result = await self.db.execute(select(Plugin).where(Plugin.id == plugin_id))
         plugin = result.scalar_one_or_none()
@@ -641,14 +642,14 @@ class PluginManager:
         return await self.get_plugin(plugin_id)
 
     async def switch_version(
-        self, plugin_id: int, version: str, user_id: Optional[int] = None
+        self, plugin_id: int, version: str, user_id: int | None = None
     ) -> bool:
         """切换插件版本 (版本回滚)"""
         result = await self.db.execute(
             select(PluginVersion).where(
                 PluginVersion.plugin_id == plugin_id,
                 PluginVersion.version == version,
-                PluginVersion.is_active == True,
+                PluginVersion.is_active,
             )
         )
         ver = result.scalar_one_or_none()
@@ -698,8 +699,8 @@ class PluginManager:
     # ---------- 更新机制 ----------
 
     async def check_updates(
-        self, plugin_id: Optional[int] = None, user_id: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
+        self, plugin_id: int | None = None, user_id: int | None = None
+    ) -> list[dict[str, Any]]:
         """检查可用的版本更新"""
         query = select(Plugin)
         if plugin_id is not None:
@@ -707,7 +708,7 @@ class PluginManager:
         result = await self.db.execute(query)
         plugins = result.scalars().all()
 
-        installed_versions: Dict[int, str] = {}
+        installed_versions: dict[int, str] = {}
         if user_id is not None:
             installation_query = select(PluginInstallation).where(
                 PluginInstallation.user_id == user_id,
@@ -756,9 +757,9 @@ class PluginManager:
     async def upgrade_plugin(
         self,
         plugin_id: int,
-        target_version: Optional[str] = None,
-        user_id: Optional[int] = None,
-    ) -> Dict:
+        target_version: str | None = None,
+        user_id: int | None = None,
+    ) -> dict:
         """升级插件到最新版 (或指定版本)"""
         result = await self.db.execute(select(Plugin).where(Plugin.id == plugin_id))
         plugin = result.scalar_one_or_none()
@@ -846,8 +847,8 @@ class PluginManager:
 
     # ---------- 用户评价 ----------
 
-    async def add_review(self, plugin_id: int, rating: int, comment: Optional[str] = None,
-                         user_id: Optional[int] = None) -> Dict:
+    async def add_review(self, plugin_id: int, rating: int, comment: str | None = None,
+                         user_id: int | None = None) -> dict:
         """添加用户评价"""
         if not (1 <= rating <= 5):
             raise ValueError("评分必须在 1-5 之间")
@@ -891,7 +892,7 @@ class PluginManager:
             "created_at": review.created_at.isoformat() if review.created_at else None,
         }
 
-    async def list_reviews(self, plugin_id: int, limit: int = 50) -> List[Dict[str, Any]]:
+    async def list_reviews(self, plugin_id: int, limit: int = 50) -> list[dict[str, Any]]:
         """获取插件评价列表"""
         result = await self.db.execute(
             select(PluginReview)
@@ -913,7 +914,7 @@ class PluginManager:
         self,
         plugin_id: int,
         review_id: int,
-        user_id: Optional[int] = None,
+        user_id: int | None = None,
     ) -> bool:
         """删除评价并重新聚合评分"""
         conditions = [
@@ -938,7 +939,7 @@ class PluginManager:
         await self.db.commit()
         return True
 
-    async def rating_summary(self, plugin_id: int) -> Dict[str, Any]:
+    async def rating_summary(self, plugin_id: int) -> dict[str, Any]:
         """评分分布汇总"""
         result = await self.db.execute(
             select(PluginReview.rating, func.count(PluginReview.id))
@@ -955,7 +956,7 @@ class PluginManager:
 
     # ---------- 部署历史 ----------
 
-    async def get_deploy_history(self, plugin_id: int, limit: int = 10) -> List[Dict[str, Any]]:
+    async def get_deploy_history(self, plugin_id: int, limit: int = 10) -> list[dict[str, Any]]:
         """获取插件部署/安装历史"""
         result = await self.db.execute(
             select(PluginInstallation)

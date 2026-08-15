@@ -1,7 +1,8 @@
 ﻿"""分子对接与蛋白质结构技能"""
 
-from typing import Dict, List, Any
-from ..base import BaseSkill, SkillParameter, SkillOutput
+from typing import Any
+
+from ..base import BaseSkill, SkillOutput, SkillParameter
 
 
 class MolecularDockingSkill(BaseSkill):
@@ -35,7 +36,7 @@ class MolecularDockingSkill(BaseSkill):
             ],
         )
 
-    async def execute(self, **kwargs) -> Dict[str, Any]:
+    async def execute(self, **kwargs) -> dict[str, Any]:
         from ....plugins.docking.manager import get_docking_manager
 
         manager = get_docking_manager()
@@ -72,7 +73,7 @@ class StructureRenderSkill(BaseSkill):
             ],
         )
 
-    async def execute(self, **kwargs) -> Dict[str, Any]:
+    async def execute(self, **kwargs) -> dict[str, Any]:
         from ....plugins.structure.manager import get_structure_manager
 
         manager = get_structure_manager()
@@ -95,7 +96,7 @@ class DockingStatusSkill(BaseSkill):
             category="docking",
         )
 
-    async def execute(self, **kwargs) -> Dict[str, Any]:
+    async def execute(self, **kwargs) -> dict[str, Any]:
         from ....plugins.docking.manager import get_docking_manager
         from ....plugins.structure.manager import get_structure_manager
 

@@ -1,6 +1,7 @@
 """分子对接管理器 - 统一调度所有对接引擎"""
 
-from typing import Dict, List, Optional, Any
+from typing import Any
+
 from loguru import logger
 
 from .base import DockingEngine, DockingResult, get_available_engines
@@ -15,7 +16,7 @@ class DockingManager:
     3. 统一返回标准化结果
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         """
         Args:
             config: 引擎路径配置, 如
@@ -24,7 +25,7 @@ class DockingManager:
                  "gold": "gold"}
         """
         self.config = config or {}
-        self._engines: Dict[str, DockingEngine] = {}
+        self._engines: dict[str, DockingEngine] = {}
         self._initialize_engines()
 
     def _initialize_engines(self):
@@ -49,11 +50,11 @@ class DockingManager:
             logger.info(f"对接引擎 [{cls.name}]: {status}"
                         + (f" ({executable})" if executable else ""))
 
-    def list_engines(self) -> List[Dict[str, Any]]:
+    def list_engines(self) -> list[dict[str, Any]]:
         """列出所有引擎及状态"""
         return get_available_engines(list(self._engines.values()))
 
-    def get_engine(self, name: str) -> Optional[DockingEngine]:
+    def get_engine(self, name: str) -> DockingEngine | None:
         """获取指定引擎"""
         return self._engines.get(name)
 
@@ -62,8 +63,8 @@ class DockingManager:
         engine_name: str,
         receptor_path: str,
         ligand_path: str,
-        parameters: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        parameters: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """执行对接
 
         Args:
@@ -108,13 +109,13 @@ class DockingManager:
             logger.exception(f"[{engine_name}] 对接异常")
             return DockingResult(success=False, engine=engine_name, error=str(e)).to_dict()
 
-    async def _run_async(self, engine: DockingEngine, receptor: Dict, ligand: Dict,
-                         parameters: Dict) -> DockingResult:
+    async def _run_async(self, engine: DockingEngine, receptor: dict, ligand: dict,
+                         parameters: dict) -> DockingResult:
         """异步包装同步对接（避免阻塞事件循环）"""
         import asyncio
         return await asyncio.to_thread(engine.run_docking, receptor, ligand, parameters)
 
-    def get_engine_info(self) -> List[Dict[str, Any]]:
+    def get_engine_info(self) -> list[dict[str, Any]]:
         """获取引擎信息（供前端表单）"""
         return [
             {
@@ -131,7 +132,7 @@ class DockingManager:
 
 
 # 全局单例
-_manager: Optional[DockingManager] = None
+_manager: DockingManager | None = None
 
 
 def get_docking_manager() -> DockingManager:

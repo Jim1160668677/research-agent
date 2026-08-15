@@ -6,9 +6,8 @@
 - 拓扑排序生成安装顺序
 """
 
-from typing import Dict, List, Optional, Any, Set, Tuple
 from collections import defaultdict, deque
-from loguru import logger
+from typing import Any
 
 
 class VersionSpec:
@@ -16,7 +15,7 @@ class VersionSpec:
 
     def __init__(self, spec: str):
         self.spec = (spec or "").strip()
-        self.constraints: List[Tuple[str, tuple]] = []
+        self.constraints: list[tuple[str, tuple]] = []
         for part in [p.strip() for p in self.spec.split(",") if p.strip()]:
             op = None
             for candidate in (">=", "<=", "==", ">", "<", "~="):
@@ -65,7 +64,7 @@ class DependencyResolver:
         """get_plugin_by_name: async (name) -> Optional[dict]"""
         self._get = get_plugin_by_name
 
-    async def resolve(self, root_name: str) -> Dict[str, Any]:
+    async def resolve(self, root_name: str) -> dict[str, Any]:
         """解析根插件的完整依赖闭包
 
         返回:
@@ -80,12 +79,12 @@ class DependencyResolver:
                 "graph": {"name": ["deps..."]},
             }
         """
-        visited: Set[str] = set()
-        stack: List[str] = []
-        cycle: Optional[List[str]] = None
-        graph: Dict[str, List[str]] = {}
-        version_map: Dict[str, str] = {}  # name -> candidate version
-        edge_constraints: Dict[Tuple[str, str], str] = {}  # (from, to) -> spec
+        visited: set[str] = set()
+        stack: list[str] = []
+        cycle: list[str] | None = None
+        graph: dict[str, list[str]] = {}
+        version_map: dict[str, str] = {}  # name -> candidate version
+        edge_constraints: dict[tuple[str, str], str] = {}  # (from, to) -> spec
 
         async def walk(name: str):
             nonlocal cycle
@@ -100,7 +99,7 @@ class DependencyResolver:
             stack.append(name)
             plugin = await self._get(name)
             visited.add(name)
-            deps: List[str] = []
+            deps: list[str] = []
             if plugin:
                 version_map[name] = plugin.get("version") or ""
                 for dep in plugin.get("dependencies") or []:
@@ -116,8 +115,8 @@ class DependencyResolver:
         await walk(root_name)
 
         # 冲突检测: 同一依赖被不同插件以互不兼容版本要求
-        conflicts: List[Dict[str, Any]] = []
-        dep_specs: Dict[str, List[Tuple[str, str]]] = defaultdict(list)
+        conflicts: list[dict[str, Any]] = []
+        dep_specs: dict[str, list[tuple[str, str]]] = defaultdict(list)
         for (_, dep_name), spec in edge_constraints.items():
             if spec:
                 dep_specs[dep_name].append((_, spec))
@@ -141,7 +140,7 @@ class DependencyResolver:
         # 拓扑排序 (Kahn): indegree = 节点的依赖数
         indegree = {n: len(deps) for n, deps in graph.items()}
         queue = deque([n for n, deg in indegree.items() if deg == 0])
-        order: List[str] = []
+        order: list[str] = []
         while queue:
             n = queue.popleft()
             order.append(n)

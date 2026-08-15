@@ -28,10 +28,9 @@ import urllib.error
 import urllib.request
 import webbrowser
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from loguru import logger
-
 
 DESKTOP_CONFIG = {
     "app_name": "Research Agent",
@@ -144,7 +143,7 @@ def _load_or_create_secret(path: Path) -> str:
     return value
 
 
-def configure_runtime_environment(user_data_dir: Optional[Path] = None) -> dict[str, str]:
+def configure_runtime_environment(user_data_dir: Path | None = None) -> dict[str, str]:
     """Configure all environment-backed services before importing the API.
 
     The function is idempotent and intentionally called before any module that
@@ -295,7 +294,7 @@ class SingleInstanceLock:
         except OSError as exc:
             logger.debug(f"更新实例端口失败: {exc}")
 
-    def running_port(self) -> Optional[int]:
+    def running_port(self) -> int | None:
         record = self._read_record()
         if self._record_is_live(record):
             port = record.get("port")
@@ -321,12 +320,12 @@ class BackendManager:
             raise ValueError("桌面 API 只能绑定到回环地址")
         self.host = host
         self.port = port
-        self.base_url: Optional[str] = None
+        self.base_url: str | None = None
         self.process = None  # legacy attribute; embedded runtime has no child process
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._server = None
-        self._socket: Optional[socket.socket] = None
-        self._failure: Optional[BaseException] = None
+        self._socket: socket.socket | None = None
+        self._failure: BaseException | None = None
 
     def _create_socket(self) -> socket.socket:
         family = socket.AF_INET6 if self.host == "::1" else socket.AF_INET
@@ -342,6 +341,7 @@ class BackendManager:
             return True
 
         import uvicorn
+
         from .core.app import create_app
 
         self._failure = None
@@ -472,9 +472,9 @@ class DesktopApp:
         self.auth = None  # authentication is owned by the Vue session
         self._lock = SingleInstanceLock() if self.single_instance else None
         self._window_state = load_window_state()
-        self._window_state_timer: Optional[threading.Timer] = None
+        self._window_state_timer: threading.Timer | None = None
         self._window_state_lock = threading.Lock()
-        self._pending_state: Optional[dict[str, Any]] = None
+        self._pending_state: dict[str, Any] | None = None
         self._window_create_retries = 0  # compatibility with the former runtime
         self._shutdown_started = False
         self._setup_signal_handlers()
@@ -545,7 +545,7 @@ class DesktopApp:
             self.window = None
             return False
 
-    def _snapshot_window_state(self) -> Optional[dict[str, Any]]:
+    def _snapshot_window_state(self) -> dict[str, Any] | None:
         if self.window is None:
             return None
         try:
@@ -611,7 +611,7 @@ class DesktopApp:
         if self._pending_state:
             self._flush_pending_state()
 
-    def _open_browser_fallback(self, url: Optional[str] = None) -> None:
+    def _open_browser_fallback(self, url: str | None = None) -> None:
         target = url or self.backend.base_url or "http://127.0.0.1:8010"
         logger.warning(f"使用系统浏览器打开: {target}")
         webbrowser.open(target)
@@ -628,7 +628,7 @@ class DesktopApp:
             logger.warning(f"系统托盘不可用: {exc}")
             self.tray = None
 
-    def _find_existing_port(self) -> Optional[int]:
+    def _find_existing_port(self) -> int | None:
         if self._lock:
             return self._lock.running_port()
         return None

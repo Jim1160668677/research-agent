@@ -4,9 +4,10 @@ GOLD: 剑桥晶体数据中心 (CCDC) 的遗传算法分子对接软件 (商业)
 通过 gold 命令行 + GOLD.conf 配置文件执行对接。
 """
 
-from typing import Dict, List, Any, Optional
 import subprocess
 from pathlib import Path
+from typing import Any
+
 from loguru import logger
 
 from .base import DockingEngine, DockingResult
@@ -33,7 +34,7 @@ class GoldEngine(DockingEngine):
         return self.INSTALL_GUIDE
 
     @classmethod
-    def get_default_parameters(cls) -> Dict[str, Any]:
+    def get_default_parameters(cls) -> dict[str, Any]:
         return {
             "protein_file": {"type": "string", "default": "", "description": "蛋白文件 (mol2/pdb)"},
             "ligand_file": {"type": "string", "default": "", "description": "配体文件 (mol2/sdf)"},
@@ -52,7 +53,7 @@ class GoldEngine(DockingEngine):
                                   "description": "搜索效率"},
         }
 
-    def prepare_receptor(self, receptor_path: str, output_dir: Optional[str] = None) -> Dict[str, Any]:
+    def prepare_receptor(self, receptor_path: str, output_dir: str | None = None) -> dict[str, Any]:
         """准备受体: GOLD 使用 mol2 或 pdb 格式"""
         self._require_executable()
         receptor = Path(receptor_path)
@@ -67,7 +68,7 @@ class GoldEngine(DockingEngine):
             "请使用 MOE/SYBYL 等工具转换格式。"
         )
 
-    def prepare_ligand(self, ligand_path: str, output_dir: Optional[str] = None) -> Dict[str, Any]:
+    def prepare_ligand(self, ligand_path: str, output_dir: str | None = None) -> dict[str, Any]:
         """准备配体"""
         self._require_executable()
         ligand = Path(ligand_path)
@@ -81,7 +82,7 @@ class GoldEngine(DockingEngine):
             f"GOLD 支持 mol2/pdb/sdf/smi 格式的配体，当前文件: {ligand.suffix}"
         )
 
-    def run_docking(self, receptor: Dict, ligand: Dict, config: Dict[str, Any]) -> DockingResult:
+    def run_docking(self, receptor: dict, ligand: dict, config: dict[str, Any]) -> DockingResult:
         """执行 GOLD 对接"""
         self._require_executable()
         out_dir = self.workdir / "gold_runs"
@@ -146,7 +147,7 @@ class GoldEngine(DockingEngine):
             metadata={"conf_file": str(conf_file)},
         )
 
-    def _parse_gold_results(self, out_dir: Path) -> List[Dict[str, Any]]:
+    def _parse_gold_results(self, out_dir: Path) -> list[dict[str, Any]]:
         """解析 GOLD 输出文件 gold_solutions.txt"""
         poses = []
         solutions_file = out_dir / "gold_solutions.txt"

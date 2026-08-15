@@ -8,10 +8,10 @@
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import Optional
-from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
 import jwt
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from loguru import logger
 
 from .app import settings
@@ -47,7 +47,7 @@ def create_access_token(
     user_id: int,
     username: str,
     role: str = "researcher",
-    expires_delta: Optional[timedelta] = None,
+    expires_delta: timedelta | None = None,
 ) -> str:
     """创建 JWT Access Token"""
     expire = datetime.now(timezone.utc) + (
@@ -68,7 +68,7 @@ def create_access_token(
 
 def create_refresh_token(
     user_id: int,
-    expires_delta: Optional[timedelta] = None,
+    expires_delta: timedelta | None = None,
 ) -> str:
     """创建 Refresh Token (更长生命周期)"""
     expire = datetime.now(timezone.utc) + (
@@ -110,7 +110,7 @@ def decode_token(token: str) -> dict:
 
 async def get_current_user(
     request: Request,
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
 ) -> dict:
     """FastAPI 依赖: 获取当前认证用户
 
@@ -153,8 +153,8 @@ async def get_current_user(
 
 
 async def get_optional_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
-) -> Optional[dict]:
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> dict | None:
     """可选认证: 如果提供了有效 token 则返回用户信息，否则返回 None"""
     if credentials is None:
         return None

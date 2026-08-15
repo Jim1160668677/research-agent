@@ -1,9 +1,10 @@
 """API routes for docking and structure tools"""
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import Any
+
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Dict, Any, Optional, List
-from loguru import logger
+
 from ...plugins.docking.manager import get_docking_manager
 from ...plugins.structure.manager import get_structure_manager
 
@@ -14,15 +15,15 @@ class DockingRequest(BaseModel):
     engine: str
     receptor_path: str
     ligand_path: str
-    parameters: Dict[str, Any] = {}
+    parameters: dict[str, Any] = {}
 
 
 class RenderRequest(BaseModel):
     tool: str
     pdb_path: str
-    output_path: Optional[str] = None
+    output_path: str | None = None
     style: str = "cartoon"
-    extra_commands: Optional[List[str]] = None
+    extra_commands: list[str] | None = None
 
 
 @router.get("/engines")

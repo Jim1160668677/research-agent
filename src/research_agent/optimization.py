@@ -9,9 +9,10 @@
 6. Windows EventLoop 优化
 """
 
+import asyncio
 import sys
 import time
-import asyncio
+
 from loguru import logger
 
 

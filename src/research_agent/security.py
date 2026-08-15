@@ -4,8 +4,8 @@ import base64
 import hashlib
 import hmac
 import secrets
-from datetime import datetime, timedelta
-from typing import Dict, Optional, List, Any
+from datetime import datetime
+from typing import Any
 
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
@@ -15,8 +15,8 @@ from loguru import logger
 from .core.app import settings
 
 try:
-    from sqlalchemy.ext.asyncio import AsyncSession
-    from sqlalchemy import select, desc
+    from sqlalchemy import desc, select
+
     from .core.models.db import AuditLog
     _db_available = True
 except ImportError:
@@ -26,8 +26,8 @@ except ImportError:
 class CryptoService:
     """加密服务 - 使用Fernet对称加密保护敏感数据"""
 
-    _fernet: Optional[Fernet] = None
-    _salt: Optional[bytes] = None
+    _fernet: Fernet | None = None
+    _salt: bytes | None = None
 
     @classmethod
     def _load_or_create_salt(cls) -> bytes:
@@ -182,16 +182,16 @@ class AuditLogger:
     在无数据库环境下回退到内存模式。
     """
 
-    _events: List[Dict[str, Any]] = []
+    _events: list[dict[str, Any]] = []
 
     @classmethod
-    def log(cls, user_id: Optional[int], action: str, resource: str,
-            detail: Optional[Dict] = None,
-            ip_address: Optional[str] = None,
-            request_id: Optional[str] = None,
+    def log(cls, user_id: int | None, action: str, resource: str,
+            detail: dict | None = None,
+            ip_address: str | None = None,
+            request_id: str | None = None,
             success: bool = True,
-            error_message: Optional[str] = None,
-            user_agent: Optional[str] = None):
+            error_message: str | None = None,
+            user_agent: str | None = None):
         """记录审计事件 (内存模式)"""
         event = {
             "timestamp": datetime.now().isoformat(),
@@ -211,14 +211,14 @@ class AuditLogger:
                   f"success={success} req_id={request_id}")
 
     @classmethod
-    async def log_to_db(cls, db, user_id: Optional[int], action: str,
-                        resource: str, resource_id: Optional[str] = None,
-                        detail: Optional[Dict] = None,
-                        ip_address: Optional[str] = None,
-                        request_id: Optional[str] = None,
+    async def log_to_db(cls, db, user_id: int | None, action: str,
+                        resource: str, resource_id: str | None = None,
+                        detail: dict | None = None,
+                        ip_address: str | None = None,
+                        request_id: str | None = None,
                         success: bool = True,
-                        error_message: Optional[str] = None,
-                        user_agent: Optional[str] = None):
+                        error_message: str | None = None,
+                        user_agent: str | None = None):
         """记录审计事件 (持久化到数据库)"""
         if not _db_available:
             cls.log(user_id, action, resource, detail,
@@ -252,10 +252,10 @@ class AuditLogger:
                     ip_address, request_id, success, error_message, user_agent)
 
     @classmethod
-    async def query(cls, db, user_id: Optional[int] = None,
-                    action: Optional[str] = None,
-                    resource: Optional[str] = None,
-                    limit: int = 100) -> List[Dict]:
+    async def query(cls, db, user_id: int | None = None,
+                    action: str | None = None,
+                    resource: str | None = None,
+                    limit: int = 100) -> list[dict]:
         """查询审计日志 (从数据库)"""
         if not _db_available:
             return cls._events[-limit:]
@@ -274,7 +274,7 @@ class AuditLogger:
         return [cls._log_to_dict(r) for r in rows]
 
     @staticmethod
-    def _log_to_dict(log: AuditLog) -> Dict:
+    def _log_to_dict(log: AuditLog) -> dict:
         return {
             "id": log.id,
             "user_id": log.user_id,

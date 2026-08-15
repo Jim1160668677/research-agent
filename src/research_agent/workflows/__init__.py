@@ -1,6 +1,6 @@
 """Workflows package"""
 
-from .engine import WorkflowEngine, WorkflowStatus, StepStatus
+from .engine import StepStatus, WorkflowEngine, WorkflowStatus
 
 __all__ = [
     "WorkflowEngine",

@@ -5,11 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
 
 MANIFEST_SCHEMA_VERSION = "1.0"
 _SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$")
@@ -25,19 +24,19 @@ def pinned_package_spec(package: str, version: str) -> str:
 
 class ManifestContract(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    inputs: Dict[str, Any] = Field(default_factory=dict)
-    outputs: Dict[str, Any] = Field(default_factory=dict)
+    inputs: dict[str, Any] = Field(default_factory=dict)
+    outputs: dict[str, Any] = Field(default_factory=dict)
 
 
 class ManifestRuntime(BaseModel):
     model_config = ConfigDict(extra="forbid")
     executor: Literal["conda", "pip", "binary", "container", "remote", "manual"]
-    platforms: List[Literal["windows", "linux", "macos"]] = Field(default_factory=list)
-    package: Optional[str] = None
-    channels: List[str] = Field(default_factory=list)
-    image: Optional[str] = None
-    executable: Optional[str] = None
-    default_args: List[str] = Field(default_factory=list)
+    platforms: list[Literal["windows", "linux", "macos"]] = Field(default_factory=list)
+    package: str | None = None
+    channels: list[str] = Field(default_factory=list)
+    image: str | None = None
+    executable: str | None = None
+    default_args: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_executor_contract(self):
@@ -53,9 +52,9 @@ class ManifestRuntime(BaseModel):
 class ManifestPermissions(BaseModel):
     model_config = ConfigDict(extra="forbid")
     network: Literal["denied", "restricted", "required"] = "denied"
-    allowed_hosts: List[str] = Field(default_factory=list)
-    filesystem_read: List[str] = Field(default_factory=list)
-    filesystem_write: List[str] = Field(default_factory=list)
+    allowed_hosts: list[str] = Field(default_factory=list)
+    filesystem_read: list[str] = Field(default_factory=list)
+    filesystem_write: list[str] = Field(default_factory=list)
     requires_approval: bool = True
 
 
@@ -71,12 +70,12 @@ class ManifestProvenance(BaseModel):
     model_config = ConfigDict(extra="forbid")
     registry: Literal["builtin", "bioconda", "toolshed", "biocontainers", "user"]
     identifier: str = Field(min_length=1, max_length=255)
-    source_url: Optional[str] = None
-    source_digest: Optional[str] = Field(default=None, pattern=r"^[a-fA-F0-9]{64}$")
+    source_url: str | None = None
+    source_digest: str | None = Field(default=None, pattern=r"^[a-fA-F0-9]{64}$")
 
     @field_validator("source_url")
     @classmethod
-    def validate_source_url(cls, value: Optional[str]) -> Optional[str]:
+    def validate_source_url(cls, value: str | None) -> str | None:
         if value is None:
             return value
         parsed = urlparse(value)
@@ -93,8 +92,8 @@ class CapabilityManifestV1(BaseModel):
     version: str = Field(min_length=1, max_length=100)
     description: str = Field(default="", max_length=5000)
     category: str = Field(default="general", min_length=1, max_length=100)
-    tags: List[str] = Field(default_factory=list, max_length=50)
-    license: Optional[str] = Field(default=None, max_length=100)
+    tags: list[str] = Field(default_factory=list, max_length=50)
+    license: str | None = Field(default=None, max_length=100)
     contract: ManifestContract = Field(default_factory=ManifestContract)
     runtime: ManifestRuntime
     permissions: ManifestPermissions = Field(default_factory=ManifestPermissions)
@@ -110,7 +109,7 @@ class CapabilityManifestV1(BaseModel):
 
     @field_validator("tags")
     @classmethod
-    def normalize_tags(cls, values: List[str]) -> List[str]:
+    def normalize_tags(cls, values: list[str]) -> list[str]:
         result = []
         for value in values:
             value = value.strip().lower()
@@ -119,7 +118,7 @@ class CapabilityManifestV1(BaseModel):
         return result
 
 
-def manifest_digest(manifest: CapabilityManifestV1 | Dict[str, Any]) -> str:
+def manifest_digest(manifest: CapabilityManifestV1 | dict[str, Any]) -> str:
     data = manifest.model_dump(mode="json") if isinstance(manifest, BaseModel) else manifest
     canonical = json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()

@@ -1,8 +1,10 @@
 """工作流引擎测试 - 取消机制"""
 
-import pytest
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
 from research_agent.workflows.engine import (
     WorkflowEngine,
     WorkflowExecutionContext,

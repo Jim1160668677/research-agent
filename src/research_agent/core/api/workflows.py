@@ -1,6 +1,5 @@
 """Workflow CRUD, execution, progress and cancellation routes."""
 
-from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,10 +18,10 @@ from ..models.schemas import (
 router = APIRouter()
 
 
-@router.get("/", response_model=List[WorkflowResponse])
+@router.get("/", response_model=list[WorkflowResponse])
 async def list_workflows(
-    category: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
+    category: str | None = Query(None),
+    status: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -97,7 +96,7 @@ async def cancel_workflow_run(
     return {"status": "cancelled", "run_id": run_id}
 
 
-@router.get("/{workflow_id}/runs", response_model=List[WorkflowRunResponse])
+@router.get("/{workflow_id}/runs", response_model=list[WorkflowRunResponse])
 async def list_workflow_runs(
     workflow_id: int,
     limit: int = Query(20, ge=1, le=100),

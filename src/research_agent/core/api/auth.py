@@ -2,17 +2,17 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..db import get_db
+from ...security import CryptoService
 from ..auth import (
     create_access_token,
     get_current_user,
 )
+from ..db import get_db
 from ..models.db import User
 from ..models.schemas import UserCreate, UserResponse
-from ...security import CryptoService
 
 router = APIRouter(tags=["auth"])
 

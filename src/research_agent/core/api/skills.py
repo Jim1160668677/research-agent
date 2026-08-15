@@ -1,25 +1,23 @@
 """API routes for skills"""
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
-from loguru import logger
+from typing import Any
 
-from ..db import get_db
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
+
 from ...agents.skills import SkillRegistry, get_executor
-from ..models.schemas import SkillResponse
 
 router = APIRouter()
 
 
 class SkillExecuteRequest(BaseModel):
-    parameters: Dict[str, Any] = Field(default_factory=dict)
+    parameters: dict[str, Any] = Field(default_factory=dict)
 
 
-@router.get("/", response_model=List[dict])
+@router.get("/", response_model=list[dict])
 async def list_skills(
-    category: Optional[str] = Query(None, description="按分类筛选"),
-    search: Optional[str] = Query(None, description="搜索关键词"),
+    category: str | None = Query(None, description="按分类筛选"),
+    search: str | None = Query(None, description="搜索关键词"),
 ):
     """列出所有可用技能"""
     skills = SkillRegistry.list_all()

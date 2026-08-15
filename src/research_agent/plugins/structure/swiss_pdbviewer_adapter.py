@@ -5,12 +5,10 @@ Swiss-PdbViewer: SIB瑞士生物信息学研究所的蛋白质结构查看器 (�
 通过命令行参数调用，部分功能需要GUI交互。
 """
 
-from typing import Dict, List, Optional, Any
 import subprocess
 from pathlib import Path
-from loguru import logger
 
-from .base import StructureTool, StructureJob
+from .base import StructureJob, StructureTool
 
 
 class SwissPdbViewerTool(StructureTool):
@@ -33,13 +31,13 @@ class SwissPdbViewerTool(StructureTool):
     def install_guide(self) -> str:
         return self.INSTALL_GUIDE
 
-    def get_commands(self, pdb_path: str, output_path: str, style: str = "cartoon") -> List[str]:
+    def get_commands(self, pdb_path: str, output_path: str, style: str = "cartoon") -> list[str]:
         """Swiss-PdbViewer 命令行参数"""
         # DeepView 命令行参数格式有限，返回建议
         return [f"spdbv {pdb_path}"]
 
-    def render_structure(self, pdb_path: str, output_path: Optional[str] = None,
-                         style: str = "cartoon", extra_commands: List[str] = None) -> StructureJob:
+    def render_structure(self, pdb_path: str, output_path: str | None = None,
+                         style: str = "cartoon", extra_commands: list[str] = None) -> StructureJob:
         """渲染结构 - Swiss-PdbViewer 渲染能力有限"""
         self._require_executable()
         pdb = Path(pdb_path)

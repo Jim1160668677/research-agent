@@ -14,11 +14,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...audit_chain import append_audit
 from ...execution.manager import RESUMABLE_STATUSES, TERMINAL_STATUSES, get_pipeline_manager
 from ...execution.nextflow import PIPELINES, pipeline_catalog, validate_request
 from ..auth import get_current_user, require_role
 from ..db import get_db
-from ...audit_chain import append_audit
 from ..models.db import PipelineRun, ResearchArtifact
 
 router = APIRouter()

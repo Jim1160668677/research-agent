@@ -4,12 +4,11 @@
 调用模式: 生成脚本 -> 调用可执行文件执行 -> 输出图像/结果
 """
 
+import shutil
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
-import shutil
 from pathlib import Path
-from loguru import logger
+from typing import Any
 
 
 @dataclass
@@ -17,12 +16,12 @@ class StructureJob:
     """结构处理任务结果"""
     success: bool
     tool: str
-    output_files: List[str] = field(default_factory=list)
+    output_files: list[str] = field(default_factory=list)
     message: str = ""
-    error: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    error: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "success": self.success,
             "tool": self.tool,
@@ -42,13 +41,13 @@ class StructureTool(ABC):
     license: str = ""
     binary_name: str = ""
 
-    def __init__(self, executable_path: Optional[str] = None, workdir: str = "./structure_work"):
+    def __init__(self, executable_path: str | None = None, workdir: str = "./structure_work"):
         self.executable_path = executable_path
         self.workdir = Path(workdir)
         self.workdir.mkdir(parents=True, exist_ok=True)
 
     @classmethod
-    def detect(cls, config_paths: Optional[List[str]] = None) -> Optional[str]:
+    def detect(cls, config_paths: list[str] | None = None) -> str | None:
         """检测工具是否可用"""
         candidates = []
         if config_paths:
@@ -63,12 +62,12 @@ class StructureTool(ABC):
         return None
 
     @abstractmethod
-    def render_structure(self, pdb_path: str, output_path: Optional[str] = None,
-                         style: str = "cartoon", extra_commands: List[str] = None) -> StructureJob:
+    def render_structure(self, pdb_path: str, output_path: str | None = None,
+                         style: str = "cartoon", extra_commands: list[str] = None) -> StructureJob:
         """渲染蛋白质结构为图像"""
 
     @abstractmethod
-    def get_commands(self, pdb_path: str, output_path: str, style: str) -> List[str]:
+    def get_commands(self, pdb_path: str, output_path: str, style: str) -> list[str]:
         """生成工具脚本命令 (供检测/调试)"""
 
     def _require_executable(self):
@@ -81,7 +80,7 @@ class StructureTool(ABC):
     def install_guide(self) -> str:
         return "请参考官方文档安装"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "display_name": self.display_name,

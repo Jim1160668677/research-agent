@@ -6,9 +6,10 @@ import hashlib
 import json
 import os
 import re
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any
 
 import httpx
 from packaging.version import InvalidVersion, Version
@@ -17,7 +18,6 @@ from sqlalchemy import select, update
 from ..core.app import settings
 from ..core.models.db import CatalogSync, Plugin, PluginVersion
 from .manifest import manifest_digest, manifest_from_plugin
-
 
 BIOCONDA_BASE = "https://conda.anaconda.org/bioconda"
 ALLOWED_SUBDIRS = {"linux-64", "linux-aarch64", "osx-64", "osx-arm64", "noarch"}
@@ -32,7 +32,7 @@ def _version_key(value: str):
         return 0, value
 
 
-def _dependency(value: str) -> Dict[str, str]:
+def _dependency(value: str) -> dict[str, str]:
     parts = value.strip().split(maxsplit=1)
     return {"name": parts[0], "version": parts[1] if len(parts) > 1 else ""}
 
@@ -45,8 +45,8 @@ class BiocondaCatalogSync:
         db,
         user_id: int,
         *,
-        client: Optional[httpx.AsyncClient] = None,
-        cache_root: Optional[Path] = None,
+        client: httpx.AsyncClient | None = None,
+        cache_root: Path | None = None,
     ):
         self.db = db
         self.user_id = user_id
@@ -85,7 +85,7 @@ class BiocondaCatalogSync:
         subdirs: Iterable[str] = ("linux-64", "noarch"),
         *,
         allow_cached_on_error: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         names, targets = self.validate_request(packages, subdirs)
         urls = [f"{BIOCONDA_BASE}/{item}/current_repodata.json" for item in targets]
         sync_record = CatalogSync(
@@ -100,7 +100,7 @@ class BiocondaCatalogSync:
         try:
             payloads = []
             cache_states = []
-            for subdir, url in zip(targets, urls):
+            for subdir, url in zip(targets, urls, strict=False):
                 payload, cache_state, digest = await self._fetch_subdir(
                     subdir, url, allow_cached_on_error
                 )
@@ -142,11 +142,11 @@ class BiocondaCatalogSync:
 
     async def _fetch_subdir(
         self, subdir: str, url: str, allow_cached_on_error: bool
-    ) -> tuple[Dict[str, Any], str, str]:
+    ) -> tuple[dict[str, Any], str, str]:
         self.cache_root.mkdir(parents=True, exist_ok=True)
         data_path = self.cache_root / f"bioconda-{subdir}-current.json"
         meta_path = self.cache_root / f"bioconda-{subdir}-current.meta.json"
-        metadata: Dict[str, Any] = {}
+        metadata: dict[str, Any] = {}
         if meta_path.is_file():
             try:
                 metadata = json.loads(meta_path.read_text(encoding="utf-8"))
@@ -201,10 +201,10 @@ class BiocondaCatalogSync:
 
     async def _apply(
         self,
-        requested: List[str],
-        payloads: List[tuple[str, Dict[str, Any], str]],
-    ) -> Dict[str, Any]:
-        records: Dict[str, List[Dict[str, Any]]] = {name: [] for name in requested}
+        requested: list[str],
+        payloads: list[tuple[str, dict[str, Any], str]],
+    ) -> dict[str, Any]:
+        records: dict[str, list[dict[str, Any]]] = {name: [] for name in requested}
         for subdir, payload, _digest in payloads:
             combined = {**(payload.get("packages") or {}), **(payload.get("packages.conda") or {})}
             for filename, metadata in combined.items():
@@ -326,7 +326,7 @@ class BiocondaCatalogSync:
 
         return {"requested": len(requested), "imported": imported, "updated": updated_count, "missing": missing}
 
-    async def history(self, limit: int = 20) -> List[Dict[str, Any]]:
+    async def history(self, limit: int = 20) -> list[dict[str, Any]]:
         result = await self.db.execute(
             select(CatalogSync)
             .where(CatalogSync.registry == "bioconda")

@@ -7,13 +7,14 @@
 - 所有数据本地聚合，定期上传 (可选)
 """
 
-import time
 import json
 import threading
-from pathlib import Path
-from typing import Optional, Dict, List, Any
-from datetime import datetime
+import time
 from collections import defaultdict
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Optional
+
 from loguru import logger
 
 
@@ -24,12 +25,12 @@ class EventTracker:
         self.storage_dir = storage_dir
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         self.enabled = enabled
-        self._events: List[Dict] = []
-        self._event_counts: Dict[str, int] = defaultdict(int)
+        self._events: list[dict] = []
+        self._event_counts: dict[str, int] = defaultdict(int)
         self._session_start = time.time()
         self._lock = threading.Lock()
         self._flush_interval = 60  # 秒
-        self._flush_thread: Optional[threading.Thread] = None
+        self._flush_thread: threading.Thread | None = None
         self._stop_event = threading.Event()
 
         # 加载历史统计
@@ -44,10 +45,10 @@ class EventTracker:
         stats_file = self.storage_dir / "usage_stats.json"
         try:
             if stats_file.exists():
-                with open(stats_file, "r", encoding="utf-8") as f:
+                with open(stats_file, encoding="utf-8") as f:
                     data = json.load(f)
                     self._event_counts = defaultdict(int, data.get("event_counts", {}))
-        except (json.JSONDecodeError, IOError):
+        except (OSError, json.JSONDecodeError):
             pass
 
     def _save_stats(self):
@@ -61,7 +62,7 @@ class EventTracker:
             }
             with open(stats_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
-        except IOError as e:
+        except OSError as e:
             logger.debug(f"保存使用统计失败: {e}")
 
     def _start_flush_thread(self):
@@ -90,10 +91,10 @@ class EventTracker:
             with open(events_file, "a", encoding="utf-8") as f:
                 for event in self._events:
                     f.write(json.dumps(event, ensure_ascii=False) + "\n")
-        except IOError as e:
+        except OSError as e:
             logger.debug(f"保存事件批次失败: {e}")
 
-    def track(self, event_type: str, data: Optional[Dict[str, Any]] = None):
+    def track(self, event_type: str, data: dict[str, Any] | None = None):
         """追踪事件"""
         if not self.enabled:
             return
@@ -139,7 +140,7 @@ class EventTracker:
         """追踪错误发生"""
         self.track("error", {"type": error_type, "component": component})
 
-    def track_feature_usage(self, feature: str, metadata: Optional[Dict] = None):
+    def track_feature_usage(self, feature: str, metadata: dict | None = None):
         """追踪功能使用"""
         self.track("feature_usage", {"feature": feature, "metadata": metadata or {}})
 
@@ -159,7 +160,7 @@ class EventTracker:
 
     # ---------- 使用场景模拟 ----------
 
-    def get_usage_summary(self) -> Dict[str, Any]:
+    def get_usage_summary(self) -> dict[str, Any]:
         """获取使用数据摘要 (用于需求分析)"""
         with self._lock:
             total = sum(self._event_counts.values())
@@ -187,7 +188,7 @@ class EventTracker:
                 "event_counts": by_type,
             }
 
-    def get_requirement_insights(self) -> List[Dict[str, Any]]:
+    def get_requirement_insights(self) -> list[dict[str, Any]]:
         """基于使用数据生成需求洞察"""
         insights = []
         summary = self.get_usage_summary()
@@ -305,9 +306,9 @@ class UsageScenarioSimulator:
     }
 
     def __init__(self):
-        self._completion_cache: Dict[str, float] = {}
+        self._completion_cache: dict[str, float] = {}
 
-    def analyze_scenario(self, scenario_key: str, available_features: set) -> Dict:
+    def analyze_scenario(self, scenario_key: str, available_features: set) -> dict:
         """分析场景完成度和需求缺口"""
         scenario = self.SCENARIOS.get(scenario_key)
         if not scenario:
@@ -347,7 +348,7 @@ class UsageScenarioSimulator:
         support_keywords = {
             "导入": {"importer", "parser", "loader"},
             "检索": {"search", "query", "retriever"},
-            "分析": {"analyzer", "viewer", "viewer"},
+            "分析": {"analyzer", "viewer"},
             "生成": {"generator", "plot", "report"},
             "计算": {"calculator", "engine", "solver"},
             "设计": {"designer", "builder", "creator"},
@@ -356,7 +357,7 @@ class UsageScenarioSimulator:
         return bool(keywords & available)
 
     def _generate_recommendations(self, scenario: dict, missing: set,
-                                    completion_rate: float) -> List[str]:
+                                    completion_rate: float) -> list[str]:
         """生成改进建议"""
         recommendations = []
 
@@ -374,7 +375,7 @@ class UsageScenarioSimulator:
 
         return recommendations
 
-    def get_all_scenario_analyses(self, available_features: set) -> List[Dict]:
+    def get_all_scenario_analyses(self, available_features: set) -> list[dict]:
         """分析所有场景"""
         results = []
         for key in self.SCENARIOS:

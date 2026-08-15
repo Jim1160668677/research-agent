@@ -6,10 +6,11 @@ AutoDock Vina: 开源分子对接软件 (GPL)
 AutoDockTools)，Vina 通过配置文件或命令行参数执行对接。
 """
 
-from typing import Dict, List, Any, Optional
-import subprocess
 import shutil
+import subprocess
 from pathlib import Path
+from typing import Any
+
 from loguru import logger
 
 from .base import DockingEngine, DockingResult
@@ -36,7 +37,7 @@ class AutoDockVinaEngine(DockingEngine):
         return self.INSTALL_GUIDE
 
     @classmethod
-    def get_default_parameters(cls) -> Dict[str, Any]:
+    def get_default_parameters(cls) -> dict[str, Any]:
         return {
             "center_x": {"type": "number", "default": 0.0, "description": "对接盒子中心X"},
             "center_y": {"type": "number", "default": 0.0, "description": "对接盒子中心Y"},
@@ -49,7 +50,7 @@ class AutoDockVinaEngine(DockingEngine):
             "energy_range": {"type": "number", "default": 3.0, "description": "最大能量差 (kcal/mol)"},
         }
 
-    def prepare_receptor(self, receptor_path: str, output_dir: Optional[str] = None) -> Dict[str, Any]:
+    def prepare_receptor(self, receptor_path: str, output_dir: str | None = None) -> dict[str, Any]:
         """准备受体: 尝试用 prepare_receptor4.py 转换为 PDBQT"""
         self._require_executable()
         out_dir = Path(output_dir) if output_dir else self.workdir
@@ -81,7 +82,7 @@ class AutoDockVinaEngine(DockingEngine):
 
         return {"path": str(pdbqt_path), "format": "pdbqt"}
 
-    def _find_prep_script(self) -> Optional[str]:
+    def _find_prep_script(self) -> str | None:
         """在常见位置查找 prepare_receptor4.py"""
         for pattern in [
             Path.home() / "mgltools*" / "bin" / "prepare_receptor4.py",
@@ -95,7 +96,7 @@ class AutoDockVinaEngine(DockingEngine):
                 return str(matches[0])
         return None
 
-    def prepare_ligand(self, ligand_path: str, output_dir: Optional[str] = None) -> Dict[str, Any]:
+    def prepare_ligand(self, ligand_path: str, output_dir: str | None = None) -> dict[str, Any]:
         """准备配体: 转换为 PDBQT"""
         self._require_executable()
         out_dir = Path(output_dir) if output_dir else self.workdir
@@ -132,7 +133,7 @@ class AutoDockVinaEngine(DockingEngine):
 
         return {"path": str(pdbqt_path), "format": "pdbqt"}
 
-    def run_docking(self, receptor: Dict, ligand: Dict, config: Dict[str, Any]) -> DockingResult:
+    def run_docking(self, receptor: dict, ligand: dict, config: dict[str, Any]) -> DockingResult:
         """执行 Vina 对接"""
         self._require_executable()
         out_dir = self.workdir / "vina_runs"
@@ -192,7 +193,7 @@ class AutoDockVinaEngine(DockingEngine):
             },
         )
 
-    def _parse_log(self, log_path: Path) -> List[Dict[str, Any]]:
+    def _parse_log(self, log_path: Path) -> list[dict[str, Any]]:
         """解析 Vina log 文件中的得分"""
         poses = []
         if not log_path.exists():
@@ -220,7 +221,7 @@ class AutoDockVinaEngine(DockingEngine):
             logger.warning(f"Vina log 解析失败: {e}")
         return poses
 
-    def _parse_pdbqt(self, output_path: Path) -> List[Dict[str, Any]]:
+    def _parse_pdbqt(self, output_path: Path) -> list[dict[str, Any]]:
         """从 PDBQT 输出文件解析模型得分"""
         poses = []
         if not output_path.exists():

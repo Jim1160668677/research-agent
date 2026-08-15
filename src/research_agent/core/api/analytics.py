@@ -1,12 +1,11 @@
 """Analytics API - 使用统计与需求洞察"""
 
-from typing import Optional
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from ...analytics import get_simulator, get_tracker
 from ..auth import get_current_user
-from ...analytics import get_tracker, get_simulator
 
 router = APIRouter(tags=["analytics"])
 
@@ -74,7 +73,7 @@ async def get_requirement_insights(
 @router.post("/track")
 async def track_event(
     event_type: str,
-    data: Optional[dict] = None,
+    data: dict | None = None,
     current_user: dict = Depends(get_current_user),
 ):
     """追踪事件 (供前端调用)"""

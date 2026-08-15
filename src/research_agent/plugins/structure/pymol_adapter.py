@@ -4,12 +4,12 @@ PyMOL: 开源分子可视化软件 (Incentive版商业 / Open-Source版开源)
 通过 pymol -cq script.pml 命令行渲染结构图像。
 """
 
-from typing import Dict, List, Optional, Any
 import subprocess
 from pathlib import Path
+
 from loguru import logger
 
-from .base import StructureTool, StructureJob
+from .base import StructureJob, StructureTool
 
 
 class PyMOLTool(StructureTool):
@@ -31,7 +31,7 @@ class PyMOLTool(StructureTool):
     def install_guide(self) -> str:
         return self.INSTALL_GUIDE
 
-    def get_commands(self, pdb_path: str, output_path: str, style: str = "cartoon") -> List[str]:
+    def get_commands(self, pdb_path: str, output_path: str, style: str = "cartoon") -> list[str]:
         """生成 PyMOL 脚本命令"""
         commands = [
             f"load {pdb_path}",
@@ -44,14 +44,14 @@ class PyMOLTool(StructureTool):
             "zoom",
         ]
         if output_path.lower().endswith(".png"):
-            commands.append(f"ray 1600, 1200")
+            commands.append("ray 1600, 1200")
             commands.append(f"png {output_path}, dpi=300")
         else:
             commands.append(f"save {output_path}")
         return commands
 
-    def render_structure(self, pdb_path: str, output_path: Optional[str] = None,
-                         style: str = "cartoon", extra_commands: List[str] = None) -> StructureJob:
+    def render_structure(self, pdb_path: str, output_path: str | None = None,
+                         style: str = "cartoon", extra_commands: list[str] = None) -> StructureJob:
         """渲染蛋白质结构"""
         self._require_executable()
         pdb = Path(pdb_path)

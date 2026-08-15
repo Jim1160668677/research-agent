@@ -1,14 +1,14 @@
 """User-scoped recommendation API."""
 
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
 
-from ..db import get_db
-from ..auth import get_current_user
 from ...recommendations.engine import RecommendationEngine
-from ..models.schemas import RecommendationResponse, RecommendationRequest
+from ..auth import get_current_user
+from ..db import get_db
+from ..models.schemas import RecommendationRequest, RecommendationResponse
 
 router = APIRouter()
 
@@ -19,7 +19,7 @@ class RecommendationFeedbackRequest(BaseModel):
     accepted: bool
 
 
-@router.get("/", response_model=List[RecommendationResponse])
+@router.get("/", response_model=list[RecommendationResponse])
 async def get_recommendations(
     context_type: str = "general",
     limit: int = Query(5, ge=1, le=20),

@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
 from sqlalchemy import select
 
 from ..core.models.db import PluginInstallation
-
 
 SELECTED = "selected"
 DEPLOYING = "deploying"
@@ -37,7 +36,7 @@ ALLOWED_TRANSITIONS = {
 }
 
 
-def state_flags(state: Optional[str]) -> Dict[str, bool]:
+def state_flags(state: str | None) -> dict[str, bool]:
     return {
         "is_selected": state not in {None, DESELECTED, UNINSTALLED},
         "is_deployed": state in INSTALLED_STATES,
@@ -46,14 +45,14 @@ def state_flags(state: Optional[str]) -> Dict[str, bool]:
     }
 
 
-def require_transition(current: Optional[str], target: str) -> None:
+def require_transition(current: str | None, target: str) -> None:
     if target not in ALLOWED_TRANSITIONS.get(current, set()):
         raise ValueError(
             f"Invalid plugin lifecycle transition: {current or 'none'} -> {target}"
         )
 
 
-async def latest_installation(db, plugin_id: int, user_id: Optional[int]):
+async def latest_installation(db, plugin_id: int, user_id: int | None):
     result = await db.execute(
         select(PluginInstallation)
         .where(
@@ -69,7 +68,7 @@ async def latest_installation(db, plugin_id: int, user_id: Optional[int]):
     return result.scalars().first()
 
 
-async def latest_installations_for_user(db, user_id: Optional[int]):
+async def latest_installations_for_user(db, user_id: int | None):
     """Return exactly one current lifecycle record per plugin for a user."""
     result = await db.execute(
         select(PluginInstallation)
@@ -80,7 +79,7 @@ async def latest_installations_for_user(db, user_id: Optional[int]):
             PluginInstallation.id.desc(),
         )
     )
-    records: Dict[int, PluginInstallation] = {}
+    records: dict[int, PluginInstallation] = {}
     for installation in result.scalars().all():
         records.setdefault(installation.plugin_id, installation)
     return records
@@ -89,13 +88,13 @@ async def latest_installations_for_user(db, user_id: Optional[int]):
 async def transition(
     db,
     plugin_id: int,
-    user_id: Optional[int],
+    user_id: int | None,
     target: str,
     *,
-    version: Optional[str] = None,
-    config: Optional[Dict[str, Any]] = None,
-    provenance: Optional[Dict[str, Any]] = None,
-    error_message: Optional[str] = None,
+    version: str | None = None,
+    config: dict[str, Any] | None = None,
+    provenance: dict[str, Any] | None = None,
+    error_message: str | None = None,
     force: bool = False,
 ) -> PluginInstallation:
     current = await latest_installation(db, plugin_id, user_id)

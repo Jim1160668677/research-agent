@@ -3,10 +3,10 @@
 from .tracker import (
     EventTracker,
     UsageScenarioSimulator,
-    get_tracker,
-    set_tracker,
     get_simulator,
+    get_tracker,
     set_simulator,
+    set_tracker,
 )
 
 __all__ = [

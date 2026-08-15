@@ -4,12 +4,12 @@ ChimeraX: UCSF开发的开源分子可视化软件 (BSD-like)
 通过 chimerax --nogui script.cxc 命令行渲染结构。
 """
 
-from typing import Dict, List, Optional, Any
 import subprocess
 from pathlib import Path
+
 from loguru import logger
 
-from .base import StructureTool, StructureJob
+from .base import StructureJob, StructureTool
 
 
 class ChimeraXTool(StructureTool):
@@ -31,7 +31,7 @@ class ChimeraXTool(StructureTool):
     def install_guide(self) -> str:
         return self.INSTALL_GUIDE
 
-    def get_commands(self, pdb_path: str, output_path: str, style: str = "cartoon") -> List[str]:
+    def get_commands(self, pdb_path: str, output_path: str, style: str = "cartoon") -> list[str]:
         """生成 ChimeraX 脚本命令"""
         style_map = {
             "cartoon": "cartoon",
@@ -54,8 +54,8 @@ class ChimeraXTool(StructureTool):
             commands.append(f"save {output_path}")
         return commands
 
-    def render_structure(self, pdb_path: str, output_path: Optional[str] = None,
-                         style: str = "cartoon", extra_commands: List[str] = None) -> StructureJob:
+    def render_structure(self, pdb_path: str, output_path: str | None = None,
+                         style: str = "cartoon", extra_commands: list[str] = None) -> StructureJob:
         """渲染蛋白质结构"""
         self._require_executable()
         pdb = Path(pdb_path)

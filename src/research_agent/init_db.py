@@ -5,6 +5,7 @@
 """
 
 import asyncio
+
 from loguru import logger
 
 
@@ -12,8 +13,8 @@ async def main():
     """初始化数据库"""
     logger.info("开始初始化数据库...")
 
-    from .core.db import init_db, AsyncSessionLocal
     from .agents.skills import SkillRegistry
+    from .core.db import AsyncSessionLocal, init_db
     from .plugins.seed import seed_plugins
 
     # 1. 创建表

@@ -1,12 +1,12 @@
 """插件市场测试 - 版本控制/依赖解析/一键部署/评价/更新机制"""
 
 import os
+
 import pytest
 from fastapi.testclient import TestClient
 
 from research_agent.core.app import create_app
 from research_agent.plugins.dependency_resolver import DependencyResolver, VersionSpec
-
 
 # ========== 单元测试: 版本约束 ==========
 
@@ -121,11 +121,11 @@ class TestDependencyResolver:
 
 def _make_plugin(**over):
     from research_agent.core.models.db import Plugin
-    base = dict(
-        name="tool", version="1.0", install_method={"method": "manual"},
-        os_compatibility=[], config_schema={}, dependencies=[], source_url="https://example.com",
-        docs_url=None, homepage=None,
-    )
+    base = {
+        "name": "tool", "version": "1.0", "install_method": {"method": "manual"},
+        "os_compatibility": [], "config_schema": {}, "dependencies": [], "source_url": "https://example.com",
+        "docs_url": None, "homepage": None,
+    }
     base.update(over)
     return Plugin(**base)
 
@@ -224,6 +224,7 @@ def client(monkeypatch, tmp_path):
     monkeypatch.setattr("research_agent.core.app.settings.database_url", test_db_url)
 
     import importlib
+
     import research_agent.core.db as db_module
     importlib.reload(db_module)
 

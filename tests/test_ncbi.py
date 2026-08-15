@@ -14,7 +14,6 @@ from research_agent.ncbi_skills.adapter import (
     NCBIProtocolError,
 )
 
-
 PUBMED_XML = """<?xml version="1.0"?>
 <PubmedArticleSet><PubmedArticle><MedlineCitation>
 <PMID>12345678</PMID><Article><ArticleTitle>CRISPR test</ArticleTitle>

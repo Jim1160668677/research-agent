@@ -1,12 +1,13 @@
 """API routes for NCBI services"""
 
+from collections.abc import AsyncIterator
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import AsyncIterator, Optional
 
-from ..db import get_db
 from ...ncbi_skills.adapter import NCBIAdapter, NCBIError
-from ..models.schemas import PubmedQuery, BlastQuery, SraQuery, NcbiResponse
+from ..db import get_db
+from ..models.schemas import BlastQuery, NcbiResponse
 
 router = APIRouter()
 
@@ -85,7 +86,7 @@ async def run_blast(
 async def search_sra(
     query: str = Query(..., description="搜索关键词"),
     max_results: int = Query(10, ge=1, le=100),
-    organism: Optional[str] = Query(None),
+    organism: str | None = Query(None),
     adapter: NCBIAdapter = Depends(ncbi_adapter),
 ):
     """搜索SRA数据库"""
@@ -118,7 +119,7 @@ async def get_genbank(
 @router.get("/gene/{gene_name}")
 async def search_gene(
     gene_name: str,
-    organism: Optional[str] = Query(None, description="物种名称"),
+    organism: str | None = Query(None, description="物种名称"),
     adapter: NCBIAdapter = Depends(ncbi_adapter),
 ):
     """搜索基因信息"""

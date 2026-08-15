@@ -1,6 +1,7 @@
 """API routes"""
 
 from fastapi import APIRouter
+
 from ..app import settings
 
 router = APIRouter()
@@ -13,7 +14,21 @@ async def health():
 
 
 # Import and include sub-routers
-from . import agents, plugins, ncbi, workflows, recommendations, skills, docking, llm, auth, analytics, system, research, pipelines
+from . import (
+    agents,
+    analytics,
+    auth,
+    docking,
+    llm,
+    ncbi,
+    pipelines,
+    plugins,
+    recommendations,
+    research,
+    skills,
+    system,
+    workflows,
+)
 
 router.include_router(auth.router, prefix="/auth", tags=["auth"])
 router.include_router(analytics.router, prefix="/analytics", tags=["analytics"])

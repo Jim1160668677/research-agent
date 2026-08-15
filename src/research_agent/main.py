@@ -2,6 +2,7 @@
 
 import uvicorn
 from loguru import logger
+
 from .core.app import create_app, settings
 
 app = create_app()

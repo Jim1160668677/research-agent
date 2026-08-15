@@ -4,12 +4,11 @@
 调用流程: prepare_receptor -> prepare_ligand -> run_docking -> parse_results
 """
 
+import shutil
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
-import shutil
 from pathlib import Path
-from loguru import logger
+from typing import Any
 
 
 @dataclass
@@ -17,13 +16,13 @@ class DockingResult:
     """对接结果"""
     success: bool
     engine: str
-    poses: List[Dict[str, Any]] = field(default_factory=list)  # [{rank, score, file}]
-    best_score: Optional[float] = None
-    output_dir: Optional[str] = None
-    error: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    poses: list[dict[str, Any]] = field(default_factory=list)  # [{rank, score, file}]
+    best_score: float | None = None
+    output_dir: str | None = None
+    error: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "success": self.success,
             "engine": self.engine,
@@ -43,13 +42,13 @@ class DockingEngine(ABC):
     description: str = ""
     license: str = ""
 
-    def __init__(self, executable_path: Optional[str] = None, workdir: str = "./docking_work"):
+    def __init__(self, executable_path: str | None = None, workdir: str = "./docking_work"):
         self.executable_path = executable_path
         self.workdir = Path(workdir)
         self.workdir.mkdir(parents=True, exist_ok=True)
 
     @classmethod
-    def detect(cls, config_paths: Optional[List[str]] = None) -> Optional[str]:
+    def detect(cls, config_paths: list[str] | None = None) -> str | None:
         """检测软件是否可用，返回可执行文件路径或None
 
         检测顺序:
@@ -75,20 +74,20 @@ class DockingEngine(ABC):
         return None
 
     @abstractmethod
-    def prepare_receptor(self, receptor_path: str, output_dir: Optional[str] = None) -> Dict[str, Any]:
+    def prepare_receptor(self, receptor_path: str, output_dir: str | None = None) -> dict[str, Any]:
         """准备受体（生成pdbqt/mae等格式）"""
 
     @abstractmethod
-    def prepare_ligand(self, ligand_path: str, output_dir: Optional[str] = None) -> Dict[str, Any]:
+    def prepare_ligand(self, ligand_path: str, output_dir: str | None = None) -> dict[str, Any]:
         """准备配体"""
 
     @abstractmethod
-    def run_docking(self, receptor: Dict, ligand: Dict, config: Dict[str, Any]) -> DockingResult:
+    def run_docking(self, receptor: dict, ligand: dict, config: dict[str, Any]) -> DockingResult:
         """执行对接"""
 
     @classmethod
     @abstractmethod
-    def get_default_parameters(cls) -> Dict[str, Any]:
+    def get_default_parameters(cls) -> dict[str, Any]:
         """返回默认参数（供前端生成表单）"""
 
     def _require_executable(self):
@@ -104,7 +103,7 @@ class DockingEngine(ABC):
         return "请参考官方文档安装"
 
 
-def get_available_engines(engines: List[DockingEngine]) -> List[Dict[str, Any]]:
+def get_available_engines(engines: list[DockingEngine]) -> list[dict[str, Any]]:
     """获取所有引擎的可用状态"""
     result = []
     for eng in engines:

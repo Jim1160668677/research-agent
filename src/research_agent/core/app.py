@@ -1,13 +1,12 @@
 """Core application setup and configuration"""
 
-import os
 import secrets
 import sys
 import time
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -115,7 +114,7 @@ def get_app_base_dir() -> Path:
     return Path(__file__).resolve().parent.parent.parent.parent
 
 
-def get_frontend_dist_dir() -> Optional[Path]:
+def get_frontend_dist_dir() -> Path | None:
     """获取前端 dist 目录"""
     base_dir = get_app_base_dir()
     candidates = [
@@ -179,7 +178,8 @@ async def lifespan(app: FastAPI):
     # 初始化事件追踪器
     try:
         from pathlib import Path
-        from ..analytics import EventTracker, UsageScenarioSimulator, set_tracker, set_simulator
+
+        from ..analytics import EventTracker, UsageScenarioSimulator, set_simulator, set_tracker
         storage_dir = Path(settings.database_url.replace("sqlite+aiosqlite:///", ""))
         storage_dir = storage_dir.parent if storage_dir.suffix == ".db" else storage_dir
         tracker = EventTracker(storage_dir=storage_dir / "analytics", enabled=True)

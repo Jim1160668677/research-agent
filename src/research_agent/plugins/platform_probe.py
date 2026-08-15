@@ -6,10 +6,10 @@ import asyncio
 import platform
 import shutil
 import sys
-from typing import Any, Dict, List, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
 
-
-TOOLS: Dict[str, Sequence[str]] = {
+TOOLS: dict[str, Sequence[str]] = {
     "micromamba": ("micromamba",),
     "mamba": ("mamba",),
     "conda": ("conda",),
@@ -32,7 +32,7 @@ def _decode_output(output: bytes) -> str:
     return output.decode("utf-8", errors="replace").strip()
 
 
-async def _command(argv: Sequence[str], timeout: float = 5.0) -> Tuple[int, str]:
+async def _command(argv: Sequence[str], timeout: float = 5.0) -> tuple[int, str]:
     try:
         process = await asyncio.create_subprocess_exec(
             *argv,
@@ -50,19 +50,19 @@ async def _command(argv: Sequence[str], timeout: float = 5.0) -> Tuple[int, str]
 
 
 class PlatformCapabilityProbe:
-    async def probe(self, *, deep: bool = False) -> Dict[str, Any]:
+    async def probe(self, *, deep: bool = False) -> dict[str, Any]:
         system = platform.system().lower()
-        tools: Dict[str, Dict[str, Any]] = {}
+        tools: dict[str, dict[str, Any]] = {}
         for name, candidates in TOOLS.items():
             executable = next((shutil.which(item) for item in candidates if shutil.which(item)), None)
-            item: Dict[str, Any] = {"available": bool(executable), "path": executable}
+            item: dict[str, Any] = {"available": bool(executable), "path": executable}
             if deep and executable:
                 code, output = await _command([executable, "--version"], timeout=4.0)
                 item.update({"probe_ok": code == 0, "version": output.splitlines()[0][:240] if output else ""})
             tools[name] = item
 
         wsl = await self._probe_wsl(deep=deep, system=system)
-        backends: List[Dict[str, Any]] = []
+        backends: list[dict[str, Any]] = []
         if tools["micromamba"]["available"] or tools["mamba"]["available"] or tools["conda"]["available"]:
             backends.append({"id": "isolated_conda", "available": True, "native": True})
         backends.append({"id": "python_venv", "available": True, "native": True})
@@ -102,9 +102,9 @@ class PlatformCapabilityProbe:
             "deep_probe": deep,
         }
 
-    async def _probe_wsl(self, *, deep: bool, system: str) -> Dict[str, Any]:
+    async def _probe_wsl(self, *, deep: bool, system: str) -> dict[str, Any]:
         executable = shutil.which("wsl.exe") if system == "windows" else None
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "available": bool(executable),
             "operational": False,
             "distributions": [],

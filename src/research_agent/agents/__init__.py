@@ -1,6 +1,6 @@
 """Agent package"""
 
-from .agent import ResearchAgent, BaseAgent, AgentContext, AgentResult
+from .agent import AgentContext, AgentResult, BaseAgent, ResearchAgent
 
 __all__ = [
     "ResearchAgent",

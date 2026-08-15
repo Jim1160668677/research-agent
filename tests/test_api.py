@@ -293,7 +293,7 @@ def test_workflow_creation_rejects_unknown_node_type(client):
 
 def test_security_module():
     """测试安全模块"""
-    from research_agent.security import CryptoService, AccessControl, AuditLogger
+    from research_agent.security import AccessControl, AuditLogger, CryptoService
 
     # 加密解密
     secret = "敏感数据-测序结果"

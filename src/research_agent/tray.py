@@ -7,8 +7,8 @@
 - 启动/关闭操作
 """
 
-import sys
 import threading
+
 from loguru import logger
 
 
@@ -40,7 +40,6 @@ class TrayManager:
         """初始化托盘图标和菜单"""
         try:
             import pystray
-            from PIL import Image, ImageDraw
 
             image = self._create_icon_image()
             menu = self._create_menu()
@@ -69,7 +68,7 @@ class TrayManager:
             # 绘制 "RA" 文字
             try:
                 font = ImageFont.truetype("arial.ttf", 28)
-            except (IOError, OSError):
+            except OSError:
                 font = ImageFont.load_default()
 
             draw.text((16, 10), "RA", fill="white", font=font)
@@ -95,9 +94,9 @@ class TrayManager:
         ihdr = chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 6, 0, 0, 0))
 
         raw = b''
-        for y in range(height):
+        for _y in range(height):
             raw += b'\x00'
-            for x in range(width):
+            for _x in range(width):
                 raw += bytes(color)
 
         idat = chunk(b'IDAT', zlib.compress(raw))

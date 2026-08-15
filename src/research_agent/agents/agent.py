@@ -1,22 +1,24 @@
 """Agent base framework"""
 
+import asyncio
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Callable
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
-import asyncio
+from typing import Any
+
 from loguru import logger
 
 
 @dataclass
 class AgentContext:
     """Agent执行上下文"""
-    user_id: Optional[int] = None
-    session_id: Optional[int] = None
-    history: List[Dict[str, Any]] = field(default_factory=list)
-    tools: Dict[str, Any] = field(default_factory=dict)
-    skills: Dict[str, Any] = field(default_factory=dict)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    user_id: int | None = None
+    session_id: int | None = None
+    history: list[dict[str, Any]] = field(default_factory=list)
+    tools: dict[str, Any] = field(default_factory=dict)
+    skills: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=datetime.now)
 
 
@@ -25,27 +27,27 @@ class AgentResult:
     """Agent执行结果"""
     success: bool
     message: str
-    data: Dict[str, Any] = field(default_factory=dict)
-    tools_used: List[str] = field(default_factory=list)
-    skills_executed: List[str] = field(default_factory=list)
-    suggestions: List[Dict[str, Any]] = field(default_factory=list)
-    error: Optional[str] = None
+    data: dict[str, Any] = field(default_factory=dict)
+    tools_used: list[str] = field(default_factory=list)
+    skills_executed: list[str] = field(default_factory=list)
+    suggestions: list[dict[str, Any]] = field(default_factory=list)
+    error: str | None = None
     execution_time: float = 0.0
 
 
 class BaseAgent(ABC):
     """智能体基类"""
-    
-    def __init__(self, name: str, description: str = "", config: Dict[str, Any] = None):
+
+    def __init__(self, name: str, description: str = "", config: dict[str, Any] = None):
         self.name = name
         self.description = description
         self.config = config or {}
-        self.tools: Dict[str, Callable] = {}
-        self.skills: Dict[str, Any] = {}
-        self.context: Optional[AgentContext] = None
-        self._history: List[Dict[str, Any]] = []
+        self.tools: dict[str, Callable] = {}
+        self.skills: dict[str, Any] = {}
+        self.context: AgentContext | None = None
+        self._history: list[dict[str, Any]] = []
         logger.info(f"Agent initialized: {name}")
-    
+
     def register_tool(self, name: str, func: Callable, description: str = ""):
         """注册工具函数"""
         self.tools[name] = {
@@ -54,50 +56,50 @@ class BaseAgent(ABC):
             "name": name,
         }
         logger.debug(f"Tool registered: {name}")
-    
+
     def register_skill(self, name: str, skill: Any):
         """注册技能"""
         self.skills[name] = skill
         logger.debug(f"Skill registered: {name}")
-    
+
     def unregister_tool(self, name: str):
         """注销工具"""
         if name in self.tools:
             del self.tools[name]
             logger.debug(f"Tool unregistered: {name}")
-    
+
     def unregister_skill(self, name: str):
         """注销技能"""
         if name in self.skills:
             del self.skills[name]
             logger.debug(f"Skill unregistered: {name}")
-    
-    def list_tools(self) -> List[Dict[str, Any]]:
+
+    def list_tools(self) -> list[dict[str, Any]]:
         """列出所有可用工具"""
         return [
             {"name": name, "description": t.get("description", "")}
             for name, t in self.tools.items()
         ]
-    
-    def list_skills(self) -> List[Dict[str, Any]]:
+
+    def list_skills(self) -> list[dict[str, Any]]:
         """列出所有可用技能"""
         return list(self.skills.keys())
-    
+
     @abstractmethod
-    async def process_message(self, message: str, context: Optional[Dict] = None) -> AgentResult:
+    async def process_message(self, message: str, context: dict | None = None) -> AgentResult:
         """处理用户消息"""
         pass
-    
+
     @abstractmethod
-    async def execute_task(self, task: Dict[str, Any]) -> AgentResult:
+    async def execute_task(self, task: dict[str, Any]) -> AgentResult:
         """执行指定任务"""
         pass
-    
+
     async def call_tool(self, tool_name: str, **kwargs) -> Any:
         """调用工具"""
         if tool_name not in self.tools:
             raise ValueError(f"Tool not found: {tool_name}")
-        
+
         tool = self.tools[tool_name]
         try:
             result = await tool["func"](**kwargs) if asyncio.iscoroutinefunction(tool["func"]) else tool["func"](**kwargs)
@@ -106,12 +108,12 @@ class BaseAgent(ABC):
         except Exception as e:
             logger.error(f"Tool execution error: {tool_name}: {e}")
             raise
-    
+
     async def execute_skill(self, skill_name: str, **kwargs) -> Any:
         """执行技能"""
         if skill_name not in self.skills:
             raise ValueError(f"Skill not found: {skill_name}")
-        
+
         skill = self.skills[skill_name]
         try:
             if hasattr(skill, 'execute'):
@@ -120,14 +122,14 @@ class BaseAgent(ABC):
                 result = await skill(**kwargs) if asyncio.iscoroutinefunction(skill) else skill(**kwargs)
             else:
                 raise ValueError(f"Invalid skill format: {skill_name}")
-            
+
             logger.debug(f"Skill executed: {skill_name}")
             return result
         except Exception as e:
             logger.error(f"Skill execution error: {skill_name}: {e}")
             raise
-    
-    def add_to_history(self, role: str, content: str, metadata: Dict = None):
+
+    def add_to_history(self, role: str, content: str, metadata: dict = None):
         """添加到历史记录"""
         entry = {
             "role": role,
@@ -136,17 +138,17 @@ class BaseAgent(ABC):
             "metadata": metadata or {},
         }
         self._history.append(entry)
-    
-    def get_history(self, limit: int = 50) -> List[Dict]:
+
+    def get_history(self, limit: int = 50) -> list[dict]:
         """获取历史记录"""
         return self._history[-limit:]
 
 
 class ResearchAgent(BaseAgent):
     """科研智能体 - 支持自然语言交互"""
-    
-    def __init__(self, db_session=None, config: Dict[str, Any] = None,
-                 user_id: Optional[int] = None, session_id: Optional[str] = None):
+
+    def __init__(self, db_session=None, config: dict[str, Any] = None,
+                 user_id: int | None = None, session_id: str | None = None):
         super().__init__(
             name="research_agent",
             description="面向科研场景的通用智能体，支持生物信息学分析、文献检索、数据可视化等",
@@ -158,7 +160,7 @@ class ResearchAgent(BaseAgent):
         self._llm_client = None
         self._initialize_clients()
         self._register_default_tools()
-    
+
     def _initialize_clients(self):
         """LLM providers are resolved lazily by ChatEngine.
 
@@ -166,7 +168,7 @@ class ResearchAgent(BaseAgent):
         message; keys may live in the encrypted database rather than settings.
         """
         self._llm_client = None
-    
+
     def _register_default_tools(self):
         """注册默认工具"""
         # NCBI查询工具
@@ -185,7 +187,7 @@ class ResearchAgent(BaseAgent):
             self._tool_fetch_genbank,
             "获取GenBank序列信息"
         )
-        
+
         # 数据分析工具
         self.register_tool(
             "analyze_expression",
@@ -197,15 +199,15 @@ class ResearchAgent(BaseAgent):
             self._tool_generate_visualization,
             "生成数据可视化图表"
         )
-        
+
         # 文献工具
         self.register_tool(
             "summarize_literature",
             self._tool_summarize_literature,
             "总结文献内容"
         )
-    
-    async def _tool_search_pubmed(self, query: str, max_results: int = 10) -> Dict:
+
+    async def _tool_search_pubmed(self, query: str, max_results: int = 10) -> dict:
         """PubMed搜索工具"""
         try:
             from ..ncbi_skills.adapter import NCBIAdapter
@@ -218,8 +220,8 @@ class ResearchAgent(BaseAgent):
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
-    
-    async def _tool_search_sra(self, query: str, max_results: int = 10) -> Dict:
+
+    async def _tool_search_sra(self, query: str, max_results: int = 10) -> dict:
         """SRA搜索工具"""
         try:
             from ..ncbi_skills.adapter import NCBIAdapter
@@ -232,8 +234,8 @@ class ResearchAgent(BaseAgent):
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
-    
-    async def _tool_fetch_genbank(self, accession: str) -> Dict:
+
+    async def _tool_fetch_genbank(self, accession: str) -> dict:
         """获取GenBank序列"""
         try:
             from ..ncbi_skills.adapter import NCBIAdapter
@@ -246,11 +248,10 @@ class ResearchAgent(BaseAgent):
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
-    
-    async def _tool_analyze_expression(self, data: Dict, method: str = "deseq2") -> Dict:
+
+    async def _tool_analyze_expression(self, data: dict, method: str = "deseq2") -> dict:
         """差异表达分析"""
         try:
-            import pandas as pd
             # 实际实现需要更多数据处理逻辑
             return {
                 "success": True,
@@ -259,8 +260,8 @@ class ResearchAgent(BaseAgent):
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
-    
-    async def _tool_generate_visualization(self, data: Dict, chart_type: str = "heatmap") -> Dict:
+
+    async def _tool_generate_visualization(self, data: dict, chart_type: str = "heatmap") -> dict:
         """生成可视化"""
         try:
             return {
@@ -270,8 +271,8 @@ class ResearchAgent(BaseAgent):
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
-    
-    async def _tool_summarize_literature(self, pmids: List[str]) -> Dict:
+
+    async def _tool_summarize_literature(self, pmids: list[str]) -> dict:
         """文献总结"""
         try:
             return {
@@ -281,8 +282,8 @@ class ResearchAgent(BaseAgent):
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
-    
-    async def process_message(self, message: str, context: Optional[Dict] = None) -> Dict:
+
+    async def process_message(self, message: str, context: dict | None = None) -> dict:
         """处理用户消息
 
         流程:
@@ -337,7 +338,7 @@ class ResearchAgent(BaseAgent):
                 "error": str(e),
             }
 
-    async def _generate_llm_response(self, message: str, intent: Dict, results: Dict) -> Dict:
+    async def _generate_llm_response(self, message: str, intent: dict, results: dict) -> dict:
         """使用真实LLM生成回复"""
         from ..llm import ChatEngine
 
@@ -377,7 +378,7 @@ class ResearchAgent(BaseAgent):
                 "llm_info": {"fallback": True, "reason": str(e)},
             }
 
-    def _build_tool_context(self, results: Dict) -> str:
+    def _build_tool_context(self, results: dict) -> str:
         """构建工具结果上下文 (限制长度避免超token)"""
         import json
         parts = []
@@ -391,12 +392,12 @@ class ResearchAgent(BaseAgent):
             summary = json.dumps(result, ensure_ascii=False)[:1500]
             parts.append(f"- {tool_name}: {summary}")
         return "\n".join(parts)
-    
-    async def _parse_intent(self, message: str) -> Dict:
+
+    async def _parse_intent(self, message: str) -> dict:
         """解析用户意图"""
         # 简单的意图识别，实际应使用LLM
         message_lower = message.lower()
-        
+
         if any(kw in message_lower for kw in ["pubmed", "文献", "论文", "搜索文章"]):
             return {"type": "literature_search", "query": message}
         elif any(kw in message_lower for kw in ["sra", "测序数据", "基因表达"]):
@@ -409,8 +410,8 @@ class ResearchAgent(BaseAgent):
             return {"type": "visualization", "query": message}
         else:
             return {"type": "general", "query": message}
-    
-    def _select_tools(self, intent: Dict) -> List[Dict]:
+
+    def _select_tools(self, intent: dict) -> list[dict]:
         """根据意图选择工具"""
         tool_map = {
             "literature_search": ["search_pubmed"],
@@ -420,18 +421,18 @@ class ResearchAgent(BaseAgent):
             "visualization": ["generate_visualization"],
             "general": [],
         }
-        
+
         selected = []
         for tool_name in tool_map.get(intent.get("type", "general"), []):
             if tool_name in self.tools:
                 selected.append(self.tools[tool_name])
-        
+
         return selected
-    
-    async def _execute_tools(self, intent: Dict, tools: List[Dict]) -> Dict:
+
+    async def _execute_tools(self, intent: dict, tools: list[dict]) -> dict:
         """执行工具"""
         results = {}
-        
+
         for tool in tools:
             tool_name = tool["name"]
             try:
@@ -454,37 +455,37 @@ class ResearchAgent(BaseAgent):
                     )
             except Exception as e:
                 results[tool_name] = {"success": False, "error": str(e)}
-        
+
         return results
-    
-    async def _generate_response(self, original: str, intent: Dict, results: Dict) -> str:
+
+    async def _generate_response(self, original: str, intent: dict, results: dict) -> str:
         """生成响应"""
         intent_type = intent.get("type", "general")
-        
+
         if intent_type == "literature_search" and results.get("search_pubmed", {}).get("success"):
             count = results["search_pubmed"].get("count", 0)
             return f"找到 {count} 篇相关文献。建议您查看PubMed详细结果，我可以为您总结关键发现。"
-        
+
         elif intent_type == "sra_search" and results.get("search_sra", {}).get("success"):
             count = results["search_sra"].get("count", 0)
             return f"找到 {count} 个SRA数据集。您可以下载原始数据或元数据进行分析。"
-        
+
         elif intent_type == "genbank_fetch" and results.get("fetch_genbank", {}).get("success"):
             return f"成功获取GenBank序列 {intent.get('accession', '')}。序列信息已返回。"
-        
+
         elif intent_type == "data_analysis":
             return "数据分析请求已接收，请提供具体的数据文件或参数。"
-        
+
         elif intent_type == "visualization":
             return "数据可视化请求已接收，请指定数据类型和图表类型。"
-        
+
         else:
             return f"我已理解您的需求：{original}。请问您希望进行文献检索、数据分析还是其他操作？"
-    
-    async def _generate_suggestions(self, intent: Dict, results: Dict) -> List[Dict]:
+
+    async def _generate_suggestions(self, intent: dict, results: dict) -> list[dict]:
         """生成建议"""
         suggestions = []
-        
+
         if intent.get("type") == "literature_search":
             suggestions.append({
                 "type": "follow_up",
@@ -496,7 +497,7 @@ class ResearchAgent(BaseAgent):
                 "text": "下载文献摘要进行综述撰写",
                 "action": "download_summaries",
             })
-        
+
         elif intent.get("type") == "sra_search":
             suggestions.append({
                 "type": "action",
@@ -508,25 +509,25 @@ class ResearchAgent(BaseAgent):
                 "text": "查看SRA数据集的元数据",
                 "action": "view_sra_metadata",
             })
-        
+
         return suggestions
-    
-    async def execute_task(self, task: Dict[str, Any]) -> Dict:
+
+    async def execute_task(self, task: dict[str, Any]) -> dict:
         """执行指定任务"""
         task_type = task.get("type", "general")
-        
+
         if task_type == "analysis":
             return await self._run_analysis(task)
         elif task_type == "workflow":
             return await self._run_workflow(task)
         else:
             return {"success": False, "error": f"Unknown task type: {task_type}"}
-    
-    async def _run_analysis(self, task: Dict) -> Dict:
+
+    async def _run_analysis(self, task: dict) -> dict:
         """运行分析任务"""
         return {"success": True, "message": "分析任务执行中..."}
-    
-    async def _run_workflow(self, task: Dict) -> Dict:
+
+    async def _run_workflow(self, task: dict) -> dict:
         """运行工作流"""
         return {"success": True, "message": "工作流执行中..."}
 

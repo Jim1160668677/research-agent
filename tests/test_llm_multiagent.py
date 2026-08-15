@@ -1,8 +1,9 @@
 """LLM模块与多智能体系统测试"""
 
 import sys
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
 
 sys.path.insert(0, "src")
 
@@ -61,6 +62,7 @@ def test_anthropic_connection_check():
 async def test_google_provider_uses_current_genai_async_client(monkeypatch):
     """The Gemini adapter targets the supported ``google.genai`` SDK API."""
     from google import genai
+
     from research_agent.llm.provider import GeminiProvider, LLMMessage
 
     usage = MagicMock(
@@ -113,6 +115,7 @@ async def test_memory_key_manager():
 async def test_env_var_fallback():
     """测试环境变量回退"""
     import os
+
     from research_agent.llm.keys import APIKeyManager
 
     os.environ["OPENAI_API_KEY"] = "sk-env-1234567890"
@@ -148,6 +151,7 @@ async def test_db_key_manager(mock_db_session):
 async def test_list_keys_status():
     """测试Key列表状态"""
     import os
+
     from research_agent.llm.keys import APIKeyManager
 
     os.environ["OPENAI_API_KEY"] = "sk-env-test-123456"
@@ -165,6 +169,7 @@ async def test_list_keys_status():
 async def test_chat_engine_no_key():
     """测试无Key时ChatEngine报错"""
     import os
+
     from research_agent.llm.chat import ChatEngine
 
     for env in [
@@ -183,6 +188,7 @@ async def test_chat_engine_no_key():
 async def test_chat_engine_status_no_config():
     """测试状态检查无配置"""
     import os
+
     from research_agent.llm.chat import ChatEngine
 
     for env in [
@@ -201,7 +207,7 @@ async def test_chat_engine_status_no_config():
 async def test_chat_engine_mock_provider():
     """测试ChatEngine使用mock provider"""
     from research_agent.llm.chat import ChatEngine
-    from research_agent.llm.provider import LLMProvider, LLMMessage, LLMResponse
+    from research_agent.llm.provider import LLMProvider, LLMResponse
 
     class MockProvider(LLMProvider):
         name = "openai"
@@ -223,7 +229,6 @@ async def test_chat_engine_mock_provider():
 
 def test_chat_engine_history():
     """测试对话历史记录"""
-    import asyncio
     from research_agent.llm.chat import ChatEngine
 
     engine = ChatEngine(provider_name="openai", db=None)
@@ -321,6 +326,7 @@ async def test_full_coordinator_run():
 def api_client():
     """Run application lifespan so the isolated database is initialized."""
     from fastapi.testclient import TestClient
+
     from research_agent.core.app import create_app
 
     with TestClient(create_app()) as client:

@@ -7,12 +7,11 @@
 - 结果解析逻辑 (mock文件)
 """
 
-import sys
-import pytest
-from unittest.mock import patch, MagicMock
-from pathlib import Path
 import tempfile
+from pathlib import Path
+from unittest.mock import patch
 
+import pytest
 
 # ========== Docking Base ==========
 
@@ -233,6 +232,7 @@ def test_docking_manager_lists_engines():
 def test_docking_manager_unknown_engine():
     """测试未知引擎"""
     import asyncio
+
     from research_agent.plugins.docking.manager import DockingManager
 
     manager = DockingManager()
@@ -244,6 +244,7 @@ def test_docking_manager_unknown_engine():
 def test_docking_manager_uninstalled_engine():
     """测试未安装引擎的提示"""
     import asyncio
+
     from research_agent.plugins.docking.manager import DockingManager
 
     with patch("research_agent.plugins.docking.manager.DockingEngine.detect", return_value=None):
@@ -323,7 +324,7 @@ def test_docking_skills_registered():
 @pytest.mark.asyncio
 async def test_molecular_docking_skill_unavailable():
     """测试对接技能在软件未安装时返回清晰错误"""
-    from research_agent.agents.skills import SkillRegistry, get_executor
+    from research_agent.agents.skills import get_executor
 
     executor = get_executor()
     result = await executor.execute(
@@ -340,7 +341,7 @@ async def test_molecular_docking_skill_unavailable():
 @pytest.mark.asyncio
 async def test_docking_status_skill():
     """测试对接状态技能"""
-    from research_agent.agents.skills import SkillRegistry, get_executor
+    from research_agent.agents.skills import get_executor
 
     executor = get_executor()
     result = await executor.execute("docking_status")

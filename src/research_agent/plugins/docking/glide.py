@@ -5,10 +5,11 @@ Glide: Schrödinger 商业分子对接软件
 商业软件 - 需要 Schrödinger 许可证。未安装时提供清晰的检测与指引。
 """
 
-from typing import Dict, List, Any, Optional
-import subprocess
 import shutil
+import subprocess
 from pathlib import Path
+from typing import Any
+
 from loguru import logger
 
 from .base import DockingEngine, DockingResult
@@ -36,7 +37,7 @@ class GlideEngine(DockingEngine):
         return self.INSTALL_GUIDE
 
     @classmethod
-    def get_default_parameters(cls) -> Dict[str, Any]:
+    def get_default_parameters(cls) -> dict[str, Any]:
         return {
             "precision": {"type": "string", "default": "SP", "enum": ["SP", "XP", "HTVS"],
                            "description": "对接精度: HTVS快速/SP标准/XP高精度"},
@@ -46,7 +47,7 @@ class GlideEngine(DockingEngine):
             "receptor_mae": {"type": "string", "default": "", "description": "受体文件 (mae)"},
         }
 
-    def prepare_receptor(self, receptor_path: str, output_dir: Optional[str] = None) -> Dict[str, Any]:
+    def prepare_receptor(self, receptor_path: str, output_dir: str | None = None) -> dict[str, Any]:
         """准备受体: 调用 prepwizard 进行蛋白准备"""
         self._require_executable()
         receptor = Path(receptor_path)
@@ -74,7 +75,7 @@ class GlideEngine(DockingEngine):
             "请使用 Schrödinger Protein Preparation Wizard 准备受体。"
         )
 
-    def prepare_ligand(self, ligand_path: str, output_dir: Optional[str] = None) -> Dict[str, Any]:
+    def prepare_ligand(self, ligand_path: str, output_dir: str | None = None) -> dict[str, Any]:
         """准备配体: 使用 LigPrep"""
         self._require_executable()
         ligand = Path(ligand_path)
@@ -98,7 +99,7 @@ class GlideEngine(DockingEngine):
 
         raise RuntimeError("未找到 ligprep，请先运行 LigPrep 准备配体。")
 
-    def run_docking(self, receptor: Dict, ligand: Dict, config: Dict[str, Any]) -> DockingResult:
+    def run_docking(self, receptor: dict, ligand: dict, config: dict[str, Any]) -> DockingResult:
         """执行 Glide 对接"""
         self._require_executable()
         out_dir = self.workdir / "glide_runs"
@@ -153,7 +154,7 @@ class GlideEngine(DockingEngine):
             },
         )
 
-    def _parse_glide_log(self, out_dir: Path) -> List[Dict[str, Any]]:
+    def _parse_glide_log(self, out_dir: Path) -> list[dict[str, Any]]:
         """从 Glide 日志解析得分"""
         poses = []
         for log_file in out_dir.glob("*.log"):

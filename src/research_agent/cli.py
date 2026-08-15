@@ -1,13 +1,13 @@
 """Research Agent CLI - 命令行接口"""
 
-import sys
-import click
-from loguru import logger
 import asyncio
+import sys
+
+import click
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
 from rich.progress import Progress
+from rich.table import Table
 
 console = Console()
 
@@ -35,7 +35,7 @@ def server(host, port, debug):
         f"调试: [{'green' if debug else 'yellow'}]{'开启' if debug else '关闭'}[/]",
         border_style="blue"
     ))
-    
+
     import uvicorn
     uvicorn.run(
         "research_agent.main:app",
@@ -57,7 +57,7 @@ def desktop(no_window, browser):
         app = DesktopApp()
         app.initialize_database()
         app.backend.start()
-        
+
         if browser:
             import webbrowser
             webbrowser.open(app.backend.base_url)
@@ -81,7 +81,7 @@ def init():
     """初始化数据库"""
     console.print("[bold]初始化数据库...[/bold]")
     console.print("正在创建表结构和种子数据...")
-    
+
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
@@ -102,22 +102,22 @@ def init():
 def chat(message, session, format):
     """与智能体对话"""
     console.print(Panel(f"[bold]用户:[/bold] {message}", border_style="blue"))
-    
+
     try:
         from .llm.chat import ChatEngine
-        engine = ChatEngine()
-        
+        ChatEngine()
+
         console.print("[italic]处理中...[/italic]")
-        
+
         # 简化的对话流程
         response = f"收到你的消息: '{message}'。智能体正在学习和进化中。"
-        
+
         if format == "json":
             import json
             console.print(json.dumps({"response": response, "session": session}, ensure_ascii=False, indent=2))
         else:
             console.print(Panel(f"[bold]AI:[/bold] {response}", border_style="green"))
-            
+
     except Exception as e:
         console.print(f"[red]对话失败: {e}[/red]")
 
@@ -139,16 +139,16 @@ def plugin_list(category, installed):
     table.add_column("分类", style="yellow")
     table.add_column("版本", justify="right")
     table.add_column("状态")
-    
+
     # 获取插件列表
     try:
         from .plugins.manager import PluginManager
         plugins = PluginManager.list_plugins(category=category, only_installed=installed)
-        
+
         if not plugins:
             console.print("[yellow]暂无插件[/yellow]")
             return
-        
+
         for p in plugins:
             status = "[green]已安装[/green]" if p.get("installed") else "[dim]未安装[/dim]"
             table.add_row(
@@ -158,7 +158,7 @@ def plugin_list(category, installed):
                 p.get("latest_version", "1.0.0"),
                 status
             )
-        
+
         console.print(table)
     except Exception as e:
         console.print(f"[red]获取插件列表失败: {e}[/red]")
@@ -169,12 +169,12 @@ def plugin_list(category, installed):
 def install(plugin_id):
     """安装插件"""
     console.print(f"正在安装插件 [cyan]{plugin_id}[/cyan]...")
-    
+
     try:
         from .plugins.deployer import Deployer
         deployer = Deployer()
         result = deployer.deploy(plugin_id)
-        
+
         if result.get("success"):
             console.print(f"[green]插件 {plugin_id} 安装成功![/green]")
         else:
@@ -188,15 +188,15 @@ def install(plugin_id):
 def uninstall(plugin_id):
     """卸载插件"""
     console.print(f"正在卸载插件 [cyan]{plugin_id}[/cyan]...")
-    
+
     try:
         from .plugins.manager import PluginManager
         success = PluginManager.uninstall_plugin(plugin_id)
-        
+
         if success:
             console.print(f"[green]插件 {plugin_id} 卸载成功![/green]")
         else:
-            console.print(f"[red]卸载失败[/red]")
+            console.print("[red]卸载失败[/red]")
     except Exception as e:
         console.print(f"[red]卸载失败: {e}[/red]")
 
@@ -208,15 +208,15 @@ def info(plugin_id):
     try:
         from .plugins.manager import PluginManager
         plugin = PluginManager.get_plugin(plugin_id)
-        
+
         if plugin:
             info_table = Table(show_header=False, box=None)
             info_table.add_column("属性", style="cyan")
             info_table.add_column("值")
-            
+
             for key, value in plugin.items():
                 info_table.add_row(str(key), str(value))
-            
+
             console.print(Panel(info_table, title=f"插件详情: {plugin.get('name', plugin_id)}", border_style="blue"))
         else:
             console.print(f"[yellow]插件 {plugin_id} 未找到[/yellow]")
@@ -230,15 +230,15 @@ def categories():
     try:
         from .plugins.seed import get_categories
         cats = get_categories()
-        
+
         table = Table(title="插件分类", show_lines=True)
         table.add_column("分类", style="cyan")
         table.add_column("名称", style="green")
         table.add_column("工具数", justify="right")
-        
+
         for cat in cats:
             table.add_row(str(cat.get("id", "")), cat.get("name", ""), str(cat.get("count", 0)))
-        
+
         console.print(table)
     except Exception as e:
         console.print(f"[red]获取分类失败: {e}[/red]")
@@ -257,17 +257,17 @@ def workflow_list(category):
     try:
         from .workflows.engine import WorkflowEngine
         workflows = WorkflowEngine.list_workflows(category=category)
-        
+
         if not workflows:
             console.print("[yellow]暂无工作流[/yellow]")
             return
-        
+
         table = Table(title="工作流列表", show_lines=True)
         table.add_column("ID", style="cyan")
         table.add_column("名称", style="green")
         table.add_column("分类", style="yellow")
         table.add_column("节点数", justify="right")
-        
+
         for wf in workflows:
             table.add_row(
                 str(wf.get("id", "")),
@@ -275,7 +275,7 @@ def workflow_list(category):
                 wf.get("category", ""),
                 str(len(wf.get("nodes", [])))
             )
-        
+
         console.print(table)
     except Exception as e:
         console.print(f"[red]获取工作流列表失败: {e}[/red]")
@@ -287,31 +287,32 @@ def workflow_list(category):
 def run(workflow_id, inputs):
     """执行工作流"""
     console.print(f"正在执行工作流 [cyan]{workflow_id}[/cyan]...")
-    
+
     try:
-        from .workflows.engine import WorkflowEngine
         import json
-        
+
+        from .workflows.engine import WorkflowEngine
+
         input_data = {}
         if inputs:
             input_data = json.loads(inputs)
-        
+
         with Progress() as progress:
             task = progress.add_task("执行中...", total=100)
-            
+
             async def execute():
                 nonlocal input_data
                 result = await WorkflowEngine.execute(workflow_id, input_data)
                 return result
-            
+
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
                 result = loop.run_until_complete(execute())
                 progress.update(task, completed=100)
-                
+
                 if result.get("success"):
-                    console.print(f"[green]工作流执行成功![/green]")
+                    console.print("[green]工作流执行成功![/green]")
                     console.print(Panel(str(result.get("output", "")[:500]), title="执行结果", border_style="green"))
                 else:
                     console.print(f"[red]执行失败: {result.get('message', '未知错误')}[/red]")
@@ -333,22 +334,22 @@ def ncbi_cmd():
 def pubmed(query, max_results):
     """搜索PubMed"""
     console.print(f"正在搜索 PubMed: [cyan]{query}[/cyan]")
-    
+
     try:
         from .ncbi_skills.adapter import NCBIAdapter
-        
+
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
             results = loop.run_until_complete(NCBIAdapter.search_pubmed(query, max_results))
-            
+
             if results:
                 table = Table(title=f"PubMed 搜索结果 ({len(results)} 条)", show_lines=True)
                 table.add_column("PMID", style="cyan")
                 table.add_column("标题")
                 table.add_column("作者")
                 table.add_column("年份", justify="right")
-                
+
                 for r in results[:10]:
                     table.add_row(
                         str(r.get("pmid", "")),
@@ -356,7 +357,7 @@ def pubmed(query, max_results):
                         r.get("authors", ""),
                         str(r.get("year", ""))
                     )
-                
+
                 console.print(table)
             else:
                 console.print("[yellow]未找到结果[/yellow]")
@@ -371,15 +372,15 @@ def pubmed(query, max_results):
 def genbank(accession):
     """获取GenBank序列"""
     console.print(f"正在获取 GenBank: [cyan]{accession}[/cyan]")
-    
+
     try:
         from .ncbi_skills.adapter import NCBIAdapter
-        
+
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
             record = loop.run_until_complete(NCBIAdapter.fetch_genbank(accession))
-            
+
             if record:
                 console.print(Panel(
                     f"[bold]登录号:[/bold] {record.get('accession', '')}\n"
@@ -405,7 +406,7 @@ def health(host, port):
     try:
         import httpx
         resp = httpx.get(f"http://{host}:{port}/health", timeout=3)
-        
+
         if resp.status_code == 200:
             data = resp.json()
             console.print(Panel(
@@ -451,17 +452,18 @@ def reset():
     if not click.confirm("这将重置数据库，所有数据将丢失。继续?"):
         console.print("[yellow]已取消[/yellow]")
         return
-    
+
     console.print("正在重置数据库...")
     try:
         import os
+
         from .core.app import settings
-        
+
         db_path = settings.database_url.replace("sqlite+aiosqlite:///", "")
         if os.path.exists(db_path):
             os.remove(db_path)
             console.print(f"[green]已删除: {db_path}[/green]")
-        
+
         # 重新初始化
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)

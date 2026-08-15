@@ -8,8 +8,9 @@ import json
 import re
 import time
 import xml.etree.ElementTree as ET
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence
+from typing import Any
 
 import httpx
 from Bio import SeqIO
@@ -31,7 +32,7 @@ class NCBIProtocolError(NCBIError):
     """NCBI returned a response that did not match the documented protocol."""
 
 
-def _xml_text(node: Optional[ET.Element]) -> str:
+def _xml_text(node: ET.Element | None) -> str:
     return "".join(node.itertext()).strip() if node is not None else ""
 
 
@@ -45,9 +46,9 @@ class NCBIAdapter:
 
     def __init__(
         self,
-        db_session: Optional[AsyncSession] = None,
+        db_session: AsyncSession | None = None,
         *,
-        http_client: Optional[httpx.AsyncClient] = None,
+        http_client: httpx.AsyncClient | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         monotonic: Callable[[], float] = time.monotonic,
         max_retries: int = 3,
@@ -63,7 +64,7 @@ class NCBIAdapter:
         self._rate_lock = asyncio.Lock()
         self._last_request_at = 0.0
 
-    async def __aenter__(self) -> "NCBIAdapter":
+    async def __aenter__(self) -> NCBIAdapter:
         await self._get_session()
         return self
 
@@ -94,11 +95,11 @@ class NCBIAdapter:
         method: str,
         url: str,
         *,
-        params: Optional[Dict[str, Any]] = None,
-        data: Optional[Dict[str, Any]] = None,
+        params: dict[str, Any] | None = None,
+        data: dict[str, Any] | None = None,
     ) -> str:
         session = await self._get_session()
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
 
         for attempt in range(self._max_retries + 1):
             await self._rate_limit()
@@ -138,7 +139,7 @@ class NCBIAdapter:
         logger.error("NCBI request failed: {}", last_error)
         raise NCBIRequestError(f"NCBI request failed: {last_error}") from last_error
 
-    def _common_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _common_params(self, params: dict[str, Any]) -> dict[str, Any]:
         result = {**params, "tool": "research_agent"}
         if self.email:
             result["email"] = self.email
@@ -153,7 +154,7 @@ class NCBIAdapter:
             params=self._common_params(params),
         )
 
-    async def _request_json(self, tool: str, **params: Any) -> Dict[str, Any]:
+    async def _request_json(self, tool: str, **params: Any) -> dict[str, Any]:
         payload = await self._request(tool, **params)
         try:
             parsed = json.loads(payload)
@@ -167,7 +168,7 @@ class NCBIAdapter:
         return parsed
 
     @staticmethod
-    def _esearch_ids(payload: Dict[str, Any]) -> List[str]:
+    def _esearch_ids(payload: dict[str, Any]) -> list[str]:
         result = payload.get("esearchresult")
         if not isinstance(result, dict):
             raise NCBIProtocolError("NCBI ESearch response is missing esearchresult")
@@ -183,13 +184,13 @@ class NCBIAdapter:
         query: str,
         max_results: int = 10,
         sort: str = "relevance",
-        date_range: Optional[Dict[str, str]] = None,
-    ) -> List[Dict[str, Any]]:
+        date_range: dict[str, str] | None = None,
+    ) -> list[dict[str, Any]]:
         query = query.strip()
         if not query:
             raise ValueError("PubMed query must not be empty")
 
-        params: Dict[str, Any] = {
+        params: dict[str, Any] = {
             "db": "pubmed",
             "term": query,
             "retmax": max(1, min(int(max_results), 100)),
@@ -207,11 +208,11 @@ class NCBIAdapter:
         ids = self._esearch_ids(await self._request_json("esearch", **params))
         return await self.pubmed_fetch_batch(ids)
 
-    async def pubmed_fetch(self, pmid: str) -> Dict[str, Any]:
+    async def pubmed_fetch(self, pmid: str) -> dict[str, Any]:
         articles = await self.pubmed_fetch_batch([pmid])
         return articles[0] if articles else {"error": f"PMID {pmid} not found"}
 
-    async def pubmed_fetch_batch(self, pmids: Sequence[str]) -> List[Dict[str, Any]]:
+    async def pubmed_fetch_batch(self, pmids: Sequence[str]) -> list[dict[str, Any]]:
         clean_ids = [str(item).strip() for item in pmids if str(item).strip()]
         if not clean_ids:
             return []
@@ -226,20 +227,20 @@ class NCBIAdapter:
         except ET.ParseError as exc:
             raise NCBIProtocolError("PubMed EFetch returned invalid XML") from exc
 
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
         for node in root.findall(".//PubmedArticle"):
             citation = node.find("./MedlineCitation")
             article = citation.find("./Article") if citation is not None else None
             if citation is None or article is None:
                 continue
             pmid = _xml_text(citation.find("./PMID"))
-            abstract_parts: List[str] = []
+            abstract_parts: list[str] = []
             for abstract in article.findall("./Abstract/AbstractText"):
                 content = _xml_text(abstract)
                 label = abstract.attrib.get("Label")
                 if content:
                     abstract_parts.append(f"{label}: {content}" if label else content)
-            authors: List[str] = []
+            authors: list[str] = []
             for author in article.findall("./AuthorList/Author"):
                 collective = _xml_text(author.find("./CollectiveName"))
                 personal = " ".join(
@@ -286,8 +287,8 @@ class NCBIAdapter:
         self,
         query: str,
         max_results: int = 10,
-        organism: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        organism: str | None = None,
+    ) -> list[dict[str, Any]]:
         term = query.strip()
         if not term:
             raise ValueError("SRA query must not be empty")
@@ -305,11 +306,11 @@ class NCBIAdapter:
         )
         return await self.sra_fetch_batch(ids)
 
-    async def sra_fetch(self, sra_id: str) -> Dict[str, Any]:
+    async def sra_fetch(self, sra_id: str) -> dict[str, Any]:
         records = await self.sra_fetch_batch([sra_id])
         return records[0] if records else {"error": f"SRA record {sra_id} not found"}
 
-    async def sra_fetch_batch(self, sra_ids: Sequence[str]) -> List[Dict[str, Any]]:
+    async def sra_fetch_batch(self, sra_ids: Sequence[str]) -> list[dict[str, Any]]:
         clean_ids = [str(item).strip() for item in sra_ids if str(item).strip()]
         if not clean_ids:
             return []
@@ -324,7 +325,7 @@ class NCBIAdapter:
         except ET.ParseError as exc:
             raise NCBIProtocolError("SRA EFetch returned invalid XML") from exc
 
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
         for index, package in enumerate(root.findall(".//EXPERIMENT_PACKAGE")):
             experiment = package.find("./EXPERIMENT")
             study_ref = experiment.find("./STUDY_REF") if experiment is not None else None
@@ -373,7 +374,7 @@ class NCBIAdapter:
     # ---------- GenBank ----------
 
     @staticmethod
-    def _sequence_record(record: Any, *, include_formats: bool = True) -> Dict[str, Any]:
+    def _sequence_record(record: Any, *, include_formats: bool = True) -> dict[str, Any]:
         accessions = record.annotations.get("accessions") or [record.id]
         features = []
         for feature in record.features:
@@ -384,7 +385,7 @@ class NCBIAdapter:
                     "qualifiers": feature.qualifiers,
                 }
             )
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "accession": accessions[0],
             "version": record.id,
             "name": record.name,
@@ -407,7 +408,7 @@ class NCBIAdapter:
         self,
         accession: str,
         retmode: str = "xml",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         records = await self.genbank_fetch_batch([accession], output_format=retmode)
         return records[0] if records else {"error": f"GenBank record {accession} not found"}
 
@@ -416,7 +417,7 @@ class NCBIAdapter:
         accessions: Sequence[str],
         *,
         output_format: str = "json",
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         clean_ids = [str(item).strip() for item in accessions if str(item).strip()]
         if not clean_ids:
             return []
@@ -450,8 +451,8 @@ class NCBIAdapter:
         self,
         *,
         method: str = "GET",
-        params: Optional[Dict[str, Any]] = None,
-        data: Optional[Dict[str, Any]] = None,
+        params: dict[str, Any] | None = None,
+        data: dict[str, Any] | None = None,
     ) -> str:
         common = {"TOOL": "research_agent"}
         if self.email:
@@ -463,12 +464,12 @@ class NCBIAdapter:
         return await self._http_request(method, self.BLAST_URL, params=params, data=data)
 
     @staticmethod
-    def _parse_blast_hits(xml_result: str, max_results: int) -> List[Dict[str, Any]]:
+    def _parse_blast_hits(xml_result: str, max_results: int) -> list[dict[str, Any]]:
         try:
             root = ET.fromstring(xml_result)
         except ET.ParseError as exc:
             raise NCBIProtocolError("BLAST returned invalid XML") from exc
-        hits: List[Dict[str, Any]] = []
+        hits: list[dict[str, Any]] = []
         for hit in root.findall(".//Hit")[:max_results]:
             hsp = hit.find("./Hit_hsps/Hsp")
             align_len = int(_xml_text(hsp.find("./Hsp_align-len")) or 0) if hsp is not None else 0
@@ -505,7 +506,7 @@ class NCBIAdapter:
         *,
         max_wait_seconds: float = 120.0,
         poll_interval: float = 2.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         program = program.lower().strip()
         database = database.strip()
         sequence = re.sub(r"\s+", "", query_sequence).upper()
@@ -565,9 +566,9 @@ class NCBIAdapter:
     async def gene_search(
         self,
         gene_name: str,
-        organism: Optional[str] = None,
+        organism: str | None = None,
         max_results: int = 10,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         term = f"{gene_name.strip()}[Gene]"
         if organism:
             term += f" AND {organism.strip()}[Organism]"
@@ -582,7 +583,7 @@ class NCBIAdapter:
         )
         return await self.gene_fetch_batch(ids)
 
-    async def gene_fetch_batch(self, gene_ids: Sequence[str]) -> List[Dict[str, Any]]:
+    async def gene_fetch_batch(self, gene_ids: Sequence[str]) -> list[dict[str, Any]]:
         clean_ids = [str(item).strip() for item in gene_ids if str(item).strip()]
         if not clean_ids:
             return []
@@ -611,7 +612,7 @@ class NCBIAdapter:
             )
         return records
 
-    async def link_datasets(self, source_db: str, source_id: str, target_db: str) -> List[str]:
+    async def link_datasets(self, source_db: str, source_id: str, target_db: str) -> list[str]:
         payload = await self._request_json(
             "elink",
             dbfrom=source_db,
@@ -619,7 +620,7 @@ class NCBIAdapter:
             db=target_db,
             retmode="json",
         )
-        links: List[str] = []
+        links: list[str] = []
         for linkset in payload.get("linksets", []):
             if not isinstance(linkset, dict):
                 continue
@@ -634,10 +635,10 @@ class NCBIAdapter:
             self._session = None
 
 
-_adapters: Dict[str, NCBIAdapter] = {}
+_adapters: dict[str, NCBIAdapter] = {}
 
 
-def get_ncbi_adapter(db_session: Optional[AsyncSession] = None) -> NCBIAdapter:
+def get_ncbi_adapter(db_session: AsyncSession | None = None) -> NCBIAdapter:
     """Return a loop-local adapter for built-in skills."""
     try:
         loop_key = str(id(asyncio.get_running_loop()))

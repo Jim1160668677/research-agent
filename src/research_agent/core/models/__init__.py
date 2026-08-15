@@ -1,21 +1,21 @@
 """Models package"""
 
 from .db import (
+    ApiKey,
     Base,
+    Conversation,
+    PipelineRun,
+    Plugin,
+    PluginInstallation,
+    Recommendation,
+    SessionMessage,
+    Skill,
     User,
     UserProfile,
     UserSession,
-    SessionMessage,
-    Plugin,
-    PluginInstallation,
-    Skill,
     Workflow,
     WorkflowRun,
     WorkflowStep,
-    Recommendation,
-    ApiKey,
-    Conversation,
-    PipelineRun,
 )
 
 __all__ = [
