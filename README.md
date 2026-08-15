@@ -108,6 +108,7 @@ Add `-CreateInstaller` when Inno Setup's `ISCC.exe` is installed. The build is d
 - [Multi-agent design](docs/multi_agent.md)
 - [Test report](docs/test_report.md)
 - [2026-08-14 recovery and full-function acceptance](docs/recovery_and_full_function_acceptance_20260814.md)
+- [2026-08-15 P0 acceptance (pipeline step, briefs, smoke eval, health wizard)](docs/p0_acceptance_20260815.md)
 - [Release notes](RELEASE_NOTES.md)
 
 ## Project layout
