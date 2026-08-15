@@ -127,7 +127,7 @@
 | 维度 | PantheonOS | Biomni | Research Agent 1.3 |
 |---|---|---|---|
 | 定位 | 可进化、分布式多 Agent 框架，端到端单细胞/空间基因组分析 | 通用生物医学 Agent（LLM 推理 + 检索增强规划 + 代码执行） | 本地优先科研 Agent + 受管生信工具供应链（Windows 桌面） |
-| 开源/许可 | 开源，BSD 2-Clause | 开源，Apache 2.0 | `pyproject.toml` 声明 MIT，但 `docs/evaluation.md` 自称“专有（本地桌面）”——许可证口径需澄清 |
+| 开源/许可 | 开源，BSD 2-Clause | 开源，Apache 2.0 | MIT（已统一口径，2026-08 起公开于 github.com/Jim1160668677/research-agent） |
 | 部署方式 | `pip install pantheon-agents` / uv / Docker；Linux/macOS 优先 | `pip install biomni` + `setup.sh` conda 环境；Linux 优先，SGLang | Windows EXE（WebView2 + 内嵌 FastAPI）一键安装；生产流程经 WSL2；另有 Docker Compose 开发/服务器模式 |
 | 生态形态 | Pantheon Store：1000+ curated agents/teams/skills，UI/CLI 安装 | 约 150 个社区工具/数据库/软件（Biomni-E2 共建中）；无正式市场 | 18 个内置技能 + 25 个市场工具 + 42 个版本 + 2 个固定 nf-core 流程；完整版本/依赖/评价体系 |
 | 特色功能 | Pantheon-Evolve（代码/算法进化）、Replayable Trajectories、5 种团队协作模式、NATS 分布式 | Know-How Library 文档检索、Biomni-R0 领域模型、Eval1 基准、MCP 集成、自然语言 + 代码执行、PDF 报告 | Co-Scientist 九阶段发现环、Capability Manifest v1、可信供应链闭环、AES-256-GCM + HMAC 审计链、Windows/WSL2 原生 |
@@ -152,7 +152,7 @@
 
 | 维度 | PantheonOS | Biomni | Research Agent |
 |---|---|---|---|
-| 开源性 | 开源，社区可共建 | 开源，社区共建中 | 代码在本地仓库，公开仓库尚未发布（GitHub 发布暂停）；开源属性不明 |
+| 开源性 | 开源，社区可共建 | 开源，社区共建中 | MIT 开源，已公开于 GitHub（2026-08）；贡献/共建机制建设中 |
 | 核心运行时 | Python + NATS + Docker 分布式 | Python + conda + SGLang（本地 LLM 可部署） | 单进程 FastAPI + SQLite + WebView2；生产计算委托 WSL2/Nextflow/容器 |
 | 扩展机制 | Store 安装 agents/teams/skills | MCP、模块化工具、可写自定义工具 | Capability Manifest v1 + 插件生命周期 + 依赖解析 + LangGraph 专家扩展 |
 | 版本/依赖管理 | 无明确系统 | `docs/known_conflicts.md` 人工清单 | 完整版本历史、传递依赖闭包、冲突/循环检测、回滚——三者中最强 |
@@ -217,7 +217,7 @@
 4. **报告闭环缺失**：Biomni 有 PDF 报告，PantheonOS 有可重放轨迹；本品报告停留在 MultiQC/写作脚手架，无自动成稿与 RO-Crate 导出。
 5. **多智能体名不副实**：LangGraph Coordinator 仍是关键词单分支路由，无任务分解、无协作规划、无工具循环；与“多 Agent”宣传存在差距。
 6. **可扩展与多机能力弱**：单进程桌面队列、SQLite、无 HPC/SSH/SLURM、无 MCP、无公共扩展 SDK，难以承接中大规模机构工作负载。
-7. **开源与社区缺失**：PantheonOS/Biomni 都是开源 + 学术背书；本品未发布公开仓库、无贡献机制、无学术论文/基准背书，生态扩张和信任获取受限。
+7. **开源与社区缺失**：PantheonOS/Biomni 都是开源 + 学术背书；本品已按 MIT 公开仓库（2026-08），但尚无贡献机制、学术论文/基准背书，生态扩张和信任获取仍受限。
 
 ### 3.3 潜在风险
 
@@ -225,7 +225,7 @@
 |---|---|---|
 | 生态差距扩大 | 高/高 | 竞品开源社区持续增长，本品生态封闭；需尽快发布贡献机制或与 Bioconda/nf-core 生态深度绑定 |
 | 平台依赖链复杂 | 中/高 | Windows + WSL2 + Nextflow + Docker + 容器镜像任一环节故障都会阻断生产流程；已有 preflight/恢复机制，但用户自助排障成本高 |
-| 许可证口径矛盾 | 中/中 | `pyproject.toml` 声明 MIT 而产品文档称“专有”，若对外发布会引起法律与信任问题，需立即统一 |
+| 许可证口径矛盾 | 中/中 | ~~pyproject.toml 声明 MIT 而产品文档称"专有"~~ 已解决：2026-08 统一为 MIT，公开仓库上线，LICENSE 随仓库发布 |
 | 上游变化 | 中/中 | nf-core 固定版本、NCBI 限流、模型 API 别名（DeepSeek/Agnes）变化；需持续契约测试与版本门（已有部分） |
 | 机构合规不足 | 中/高 | 无 SSO、ABAC、保留/销毁策略、外部审计锚定，人类基因组/临床数据场景难以进入机构采购 |
 | 单机性能天花板 | 中/中 | 桌面单进程无法支撑大规模组学；需远程/HPC 执行面 |
@@ -337,7 +337,7 @@
 
 **建议的下一步（立即行动）**：
 
-1. 统一许可证声明（MIT vs 专有），决定是否公开仓库——这是生态与信任的前提。
+1. ~~统一许可证声明（MIT vs 专有）~~ 已完成：统一为 MIT，LICENSE 已提交、仓库公开（2026-08）。
 2. 打通科研运行时与 nf-core 的“能力步骤”边界，先交付“样本表 → PDF 研究简报”最小闭环。
 3. 为插件验证增加任务级冒烟测试，把“验证优先”从理念变成可展示指标。
 4. 在 README/产品页补充 RA-Eval 与黄金运行数据，形成可量化的竞争叙事。

@@ -1,13 +1,15 @@
 """Database utilities"""
 
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from sqlalchemy.pool import NullPool
-from loguru import logger
 
-from .models.db import Base
+from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
+
 from .app import settings
+from .models.db import Base
+
 
 def _create_engine(database_url: str):
     return create_async_engine(
@@ -162,6 +164,18 @@ def _light_migrations(conn):
             if col not in existing_cols:
                 conn.execute(text(f"ALTER TABLE research_artifacts ADD COLUMN {col} {ddl}"))
                 logger.info(f"Migration: research_artifacts.{col} added")
+
+    if inspector.has_table("pipeline_runs"):
+        existing_cols = {c["name"] for c in inspector.get_columns("pipeline_runs")}
+        if "run_id" not in existing_cols:
+            conn.execute(text(
+                "ALTER TABLE pipeline_runs ADD COLUMN run_id VARCHAR(36) REFERENCES research_runs(id)"
+            ))
+            logger.info("Migration: pipeline_runs.run_id added")
+        conn.execute(text(
+            "UPDATE pipeline_runs SET run_id = json_extract(provenance, '$.research_run_id') "
+            "WHERE run_id IS NULL AND provenance IS NOT NULL"
+        ))
 
     if inspector.has_table("audit_logs"):
         existing_cols = {c["name"] for c in inspector.get_columns("audit_logs")}

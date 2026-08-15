@@ -14,7 +14,7 @@
 | 版本与依赖 | 无明确版本/依赖管理系统 | 有 `docs/known_conflicts.md` 冲突清单（人工） | 完整版本历史 + 传递依赖解析 + 冲突/循环检测 + 回滚 |
 | 验证闭环 | 未强调 | 未强调 | `discovered→selected→deploying→deployed→verified→enabled` 全程状态机 + 探针验证 |
 | 评价体系 | 无 | 无 | 1-5 星评分 + 评论 + 分布直方图 |
-| 许可 | BSD 2-Clause | Apache 2.0 | 专有（本地桌面） |
+| 许可 | BSD 2-Clause | Apache 2.0 | MIT（公开仓库 http://github.com/Jim1160668677/research-agent ） |
 | 运行平台 | Linux/macOS 优先（NATS、Docker） | Linux 优先（conda、SGLang） | Windows/WSL2 原生支持（含平台探测） |
 | 安全 | 2026-06 发生 PyPI 投毒事故（Hades，0.6.1/0.6.2 已被移除） | 明确警告 LLM 代码以全系统权限执行，建议沙箱 | 固定 HTTPS 源 + SHA-256 摘要 + 白名单命令 + 模拟预览 + 审计 |
 

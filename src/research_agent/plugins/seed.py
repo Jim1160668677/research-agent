@@ -102,6 +102,10 @@ BUILTIN_PLUGINS = [
         "os_compatibility": ["windows", "linux", "macos"],
         "install_method": {"method": "conda", "package": "fastqc", "channel": "bioconda",
                            "probe": {"command": "fastqc", "args": ["--version"]}},
+        "smoke_tests": [
+            {"id": "version", "command": "fastqc", "args": ["--version"],
+             "expect_exit": 0, "expect_stdout": "FastQC", "timeout_s": 60},
+        ],
         "downloads": 1280, "rating_avg": 4.7, "rating_count": 86,
         "dependencies": [],
         "version_history": [
@@ -193,13 +197,17 @@ BUILTIN_PLUGINS = [
         "os_compatibility": ["windows", "linux", "macos"],
         "install_method": {"method": "conda", "package": "samtools", "channel": "bioconda",
                            "probe": {"command": "samtools", "args": ["--version"]}},
+        "smoke_tests": [
+            {"id": "version", "command": "samtools", "args": ["--version"],
+             "expect_exit": 0, "expect_stdout": "samtools", "timeout_s": 60},
+        ],
         "downloads": 2104, "rating_avg": 4.9, "rating_count": 148,
         "dependencies": [{"name": "htslib", "version": ">=1.19"}],
         "version_history": [
             {"version": "1.17", "release_date": "2023-02-01", "size_mb": 3.2,
              "changelog": "支持更高效的索引"},
             {"version": "1.19", "release_date": "2023-10-15", "size_mb": 3.4,
-             "changelog": "修复CRAM编码问题，新增工具命令"}, 
+             "changelog": "修复CRAM编码问题，新增工具命令"},
             {"version": "1.21", "release_date": "2024-12-01", "size_mb": 3.6,
              "changelog": "性能优化，修复内存泄漏", "is_latest": True},
         ],
@@ -273,6 +281,10 @@ BUILTIN_PLUGINS = [
         "os_compatibility": ["windows", "linux", "macos"],
         "install_method": {"method": "conda", "package": "kallisto", "channel": "bioconda",
                            "probe": {"command": "kallisto", "args": ["version"]}},
+        "smoke_tests": [
+            {"id": "version", "command": "kallisto", "args": ["version"],
+             "expect_exit": 0, "expect_stdout": "kallisto", "timeout_s": 60},
+        ],
         "downloads": 743, "rating_avg": 4.6, "rating_count": 49,
         "dependencies": [],
         "version_history": [
@@ -367,7 +379,7 @@ BUILTIN_PLUGINS = [
             {"version": "2.4.5", "release_date": "2022-01-01", "size_mb": 8.0,
              "changelog": "经典版本"},
             {"version": "2.5.3", "release_date": "2023-12-01", "size_mb": 8.4,
-             "changelog": "支持新的索引格式"}, 
+             "changelog": "支持新的索引格式"},
             {"version": "2.5.4", "release_date": "2024-06-01", "size_mb": 8.4,
              "changelog": "修复C++20编译问题", "is_latest": True},
         ],
@@ -421,7 +433,7 @@ BUILTIN_PLUGINS = [
             {"version": "0.23.2", "release_date": "2022-06-01", "size_mb": 1.2,
              "changelog": "修复PE模式bug"},
             {"version": "0.23.4", "release_date": "2023-10-01", "size_mb": 1.2,
-             "changelog": "新增UMI处理"}, 
+             "changelog": "新增UMI处理"},
             {"version": "0.24.0", "release_date": "2024-09-01", "size_mb": 1.3,
              "changelog": "性能提升30%", "is_latest": True},
         ],
@@ -675,9 +687,11 @@ ALL_TOOLS = list(GENERIC_TOOLS.values()) + BUILTIN_PLUGINS
 
 async def seed_plugins(session):
     """将内置插件种子数据写入数据库 (UPSERT 语义，可安全重复执行)"""
-    from ..core.models.db import Plugin, PluginVersion, PluginReview
+    from sqlalchemy import func, select
+    from sqlalchemy import update as sa_update
+
+    from ..core.models.db import Plugin, PluginReview, PluginVersion
     from .manifest import manifest_digest, manifest_from_plugin
-    from sqlalchemy import select, update as sa_update, func
 
     added = 0
     updated = 0
@@ -704,6 +718,7 @@ async def seed_plugins(session):
                 support_email=data.get("support_email"),
                 os_compatibility=data.get("os_compatibility", []),
                 install_method=data.get("install_method", {"method": "manual"}),
+                smoke_tests=data.get("smoke_tests", []),
                 downloads=data.get("downloads", 0),
                 rating_avg=data.get("rating_avg", 0.0),
                 rating_count=data.get("rating_count", 0),
@@ -728,6 +743,8 @@ async def seed_plugins(session):
             plugin.support_email = data.get("support_email", "")
             plugin.os_compatibility = data.get("os_compatibility", [])
             plugin.install_method = data.get("install_method", {"method": "manual"})
+            if data.get("smoke_tests"):
+                plugin.smoke_tests = data["smoke_tests"]
             if not plugin.downloads:
                 plugin.downloads = data.get("downloads", 0)
             if not plugin.rating_avg:

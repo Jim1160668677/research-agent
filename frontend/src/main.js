@@ -13,6 +13,7 @@ import LLMConfig from './views/LLMConfig.vue'
 import ResearchWorkspace from './views/ResearchWorkspace.vue'
 import Pipelines from './views/Pipelines.vue'
 import Security from './views/Security.vue'
+import HealthCheck from './views/HealthCheck.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -28,6 +29,7 @@ const router = createRouter({
     { path: '/workflows/new', component: WorkflowDesigner },
     { path: '/workflows/:id', component: WorkflowDesigner },
     { path: '/ncbi', component: NCBI },
+    { path: '/health', component: HealthCheck },
     { path: '/llm', component: LLMConfig },
     { path: '/security', component: Security },
     { path: '/:pathMatch(.*)*', redirect: '/dashboard' },

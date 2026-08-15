@@ -46,7 +46,7 @@
     </div>
 
     <section v-if="activeRun" class="panel detail">
-      <header class="run-head"><div><p>RESEARCH RUN · {{ activeRun.id.slice(0,8) }}</p><h2>{{ activeRun.objective }}</h2><span>{{ activeRun.domains.map(domainLabel).join(' · ') }}</span></div><div><b :class="activeRun.status">{{ statusLabel(activeRun.status) }}</b><strong>{{ activeRun.progress }}%</strong><button v-if="['pending','running'].includes(activeRun.status)" @click="cancelRun">取消</button></div></header>
+      <header class="run-head"><div><p>RESEARCH RUN · {{ activeRun.id.slice(0,8) }}</p><h2>{{ activeRun.objective }}</h2><span>{{ activeRun.domains.map(domainLabel).join(' · ') }}</span></div><div><b :class="activeRun.status">{{ statusLabel(activeRun.status) }}</b><strong>{{ activeRun.progress }}%</strong><button v-if="activeRun.status==='completed'" @click="downloadReport" title="聚合目标、证据、统计与缺口为可下载 PDF">生成简报 PDF</button><button v-if="['pending','running'].includes(activeRun.status)" @click="cancelRun">取消</button></div></header>
       <div class="progress"><i :style="{width:`${activeRun.progress}%`}"></i></div>
       <div v-if="activeRun.result?.has_gaps" class="gap"><b>结果包含证据缺口</b><span>请检查警告与人工复核门，不要把降级输出当作已证实结论。</span></div>
       <div class="timeline">
@@ -86,6 +86,7 @@ async function loadRuns(){try{runs.value=(await axios.get('/api/v1/research/runs
 async function selectRun(id){try{activeRun.value=(await axios.get(`/api/v1/research/runs/${id}`)).data;if(['pending','running'].includes(activeRun.value.status))poll()}catch(e){error.value=apiError(e,'任务详情加载失败')}}
 function poll(){clearInterval(pollTimer);pollTimer=setInterval(async()=>{if(!activeRun.value||!['pending','running'].includes(activeRun.value.status)){clearInterval(pollTimer);return}await selectRun(activeRun.value.id);await loadRuns()},1200)}
 async function cancelRun(){try{await axios.post(`/api/v1/research/runs/${activeRun.value.id}/cancel`);await selectRun(activeRun.value.id)}catch(e){error.value=apiError(e,'取消失败')}}
+async function downloadReport(){try{const res=await axios.post(`/api/v1/research/runs/${activeRun.value.id}/report`,{format:'pdf'},{responseType:'blob'});const url=URL.createObjectURL(new Blob([res.data],{type:'application/pdf'}));const a=document.createElement('a');a.href=url;a.download=`research-brief-${activeRun.value.id.slice(0,8)}.pdf`;a.click();URL.revokeObjectURL(url)}catch(e){error.value=apiError(e,'简报生成失败')}}
 async function loadProposals(){try{proposals.value=(await axios.get('/api/v1/research/learning-proposals',{params:{status:'pending'}})).data.proposals||[]}catch(_){}}
 async function submitFeedback(){try{await axios.post(`/api/v1/research/runs/${activeRun.value.id}/feedback`,{...feedback,propose_learning:true});feedbackSent.value=true;await loadProposals()}catch(e){error.value=apiError(e,'反馈失败')}}
 async function decide(id,decision){try{await axios.post(`/api/v1/research/learning-proposals/${id}/decision`,{decision});await loadProposals()}catch(e){error.value=apiError(e,'提案处理失败')}}

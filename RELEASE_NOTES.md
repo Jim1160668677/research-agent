@@ -1,4 +1,17 @@
-# Unreleased recovery hardening
+# Unreleased — Research Agent 1.4.0 (P0 开发计划 T1–T5)
+
+- License aligned to MIT across `pyproject.toml`, `README.md`, and `docs`; repository metadata unified.
+- Added the `pipeline_execution` capability step to the research runtime: registered in `CAPABILITIES`/`HANDLERS`/planner analysis domain, revision-pinned nf-core runs with configurable polling (`poll_interval`, `timeout_seconds`), artifacts flowing into downstream `data_analysis`/`research_writing` steps, and truthful `degraded` state when preflight is not ready.
+- Added one-click research briefs: `POST /research/runs/{id}/report` renders Markdown/HTML/PDF from objectives, plan, evidence, statistics and gaps; `PipelineRun` rows are linked to research runs for provenance.
+- Added RA-Eval v1 plugin smoke testing: whitelisted command specs (`smoke_tests`) seeded for fastqc/samtools/kallisto, managed execution with history, and admin `POST /plugins/{id}/smoke` + `GET /plugins/{id}/smoke-history` APIs.
+- Added the environment health-check wizard: `GET /system/health-check` aggregates host platform, conda, WSL2, containers, Nextflow, pipeline compatibility/preflight and disk, returning status items with Chinese fix hints; new HealthCheck.vue view under 资源与工具.
+- Baseline expanded to 291 passing Python tests (259 → 264 → 270 → 291) plus the Vue production build.
+
+See `docs/roadmap_p0.md` for task states and `docs/test_report.md` for the latest baseline.
+
+---
+
+# Unreleased recovery hardening (2026-08-14)
 
 - Restored the complete local frontend dependencies, production assets, desktop build and distributable without modifying user data or model configuration.
 - Added a formal pipeline preparation stage with pinned nf-core commit verification, Windows-side prefetch, LF-only worktrees, long-path support, per-file Git blob verification, atomic activation and recoverable backup behavior.

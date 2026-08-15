@@ -9,6 +9,8 @@ The desktop build is a native WebView2 window backed by one embedded FastAPI/Uvi
 - First-run owner setup, login, registration, JWT authentication, and role-aware administration.
 - Persistent, user-isolated conversations with resumable sessions.
 - A dedicated research workspace with explicit DAG planning, evidence provenance, bounded background execution, cancellation, confidence/limitations, and human review gates.
+- An nf-core capability step (`pipeline_execution`) inside the research runtime: revision-pinned pipeline runs with configurable polling, artifacts feeding downstream analysis/writing steps, and truthful degraded state on preflight failure.
+- One-click research briefs (Markdown/HTML/PDF) aggregating objectives, evidence, statistics and gaps per run.
 - User-isolated CSV/TSV/text/JSON/PDF/image artifacts with AES-256-GCM encryption at rest, dual integrity checks, bounded extraction, privacy-preserving table profiling, and encrypted visualization artifacts.
 - DeepSeek V4, Agnes 2.0 Flash, OpenAI, Anthropic, and Google Gemini providers with encrypted per-user API keys, model health diagnostics, normalized failures, timeouts, and bounded retries.
 - A Nature Co-Scientist-inspired discovery loop: evidence grounding, hypothesis generation, reflection, debate/ranking, evolution, meta-review, experiment design, writing, and integrity checks.
@@ -16,9 +18,11 @@ The desktop build is a native WebView2 window backed by one embedded FastAPI/Uvi
 - LangGraph-based specialist-agent orchestration.
 - Validated DAG workflows with execution history, progress, ownership checks, and cancellation.
 - A scientific capability market with Capability Manifest v1, truthful per-user lifecycle, fixed-version isolated deployment, Bioconda metadata sync/cache, platform probes, reviews, and dependency plans.
+- RA-Eval v1: assertion-based plugin smoke testing (whitelisted command specs) with execution API and history for verified, deployed tools.
 - A production pipeline workspace with a uniform execution-backend contract, revision-pinned nf-core/rnaseq 3.26.0 and nf-core/sarek 3.9.0, WSL2 transport, deep runtime preflight, cancellation/resume, Nextflow reports, and bounded result manifests.
 - AutoDock Vina, Glide, GOLD, PyMOL, ChimeraX, and Swiss-PdbViewer adapters.
 - A responsive Vue 3 desktop interface, dashboard, keyboard shortcuts, system tray, single-instance protection, persistent window state, and browser fallback.
+- An environment health-check wizard with aggregated host/toolchain/WSL2/container/Nextflow/pipeline-preflight/disk checks and Chinese fix hints.
 - An administrator security center showing artifact encryption coverage, audit-chain integrity, and explicit migration of legacy plaintext artifacts.
 
 External model calls require the corresponding API key. NCBI features require network access. Docking and structure operations require their separately licensed or installed command-line applications. Production nf-core execution on Windows requires an operational WSL2 distribution with a compatible Nextflow release and selected runtime inside WSL2.

@@ -1,5 +1,18 @@
 # Verification report
 
+## 2026-08-15 P0 baseline — Research Agent 1.4.0 (T1–T5)
+
+The P0 development plan (docs/roadmap_p0.md) closed T1–T5: MIT license alignment; the `pipeline_execution` research-runtime capability step with configurable polling and truthful degraded preflight state; one-click Markdown/HTML/PDF research briefs; RA-Eval v1 plugin smoke testing; and the environment health-check wizard.
+
+The complete Python suite now collects **291 tests** and completes with **291 passed, 0 failed in 261.77 seconds**:
+
+- T2 adds planner/import/handler tests for the `pipeline_execution` step (step keys `["intake","data","pipeline","writing","integrity"]`, preflight-failure degraded state, artifact import into downstream writing, failed-run degraded confidence) using fake pipeline manager/backend fixtures.
+- T3 adds 6 briefing tests: Markdown template sections (objectives/evidence/gaps), HTML/PDF byte rendering, CJK font registration on Windows, download endpoints and run ownership.
+- T4 adds 18 smoke tests: spec validation (command whitelist, shell metacharacter rejection, exit-code/timeout bounds), managed execution via the deployer transport, history persistence, admin-only API gates, and version-probe fallback.
+- T5 adds 3 health-check tests: platform probe structure, aggregated API item/status/summary contract, and auth requirement.
+
+`ruff check` is clean across `src/` and `tests/`. Frontend: the production Vue build covers the new HealthCheck view, the brief-download button, and the smoke-run button.
+
 ## 2026-08-14 recovery verification
 
 After restoring the complete local desktop/runtime assets, the exact repaired source baseline completed **259 passed, 0 failed**. The standard `dist\ResearchAgent\ResearchAgent.exe` build passed fresh-profile security, complete nine-stage research-flow, and deep WSL2/Nextflow/Docker preflight checks. A real pinned `nf-core/rnaseq@3.26.0` `test,docker` execution completed 234 tasks with no failures and produced 967 result files. The repaired executable SHA-256 is `7F326E2C285681A47AF82EDAE6DA144CE235858E7E2E9EDE2B72BA51C25F9B30`.

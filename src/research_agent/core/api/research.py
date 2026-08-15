@@ -9,13 +9,24 @@ from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ...audit_chain import append_audit
+from ...reporting.brief import build_brief_markdown
 from ...research.artifacts import ArtifactError, public_artifact
 from ...research.contracts import list_capabilities
 from ...research.manager import get_run_manager
@@ -25,6 +36,7 @@ from ..db import get_db
 from ..models.db import (
     AgentFeedback,
     LearningProposal,
+    PipelineRun,
     ResearchArtifact,
     ResearchRun,
     ResearchRunStep,
@@ -65,6 +77,10 @@ class ProposalDecision(BaseModel):
 
 class ArtifactMigrationRequest(BaseModel):
     artifact_ids: list[str] = Field(default_factory=list, max_length=1000)
+
+
+class ReportFormat(BaseModel):
+    format: Literal["md", "html", "pdf"] = "pdf"
 
 
 def _bounded_context(context: dict[str, Any]) -> dict[str, Any]:
@@ -431,6 +447,74 @@ async def download_artifact(
             "Content-Disposition": disposition,
             "Content-Length": str(len(raw)),
             "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.post("/runs/{run_id}/report")
+async def generate_report(
+    run_id: str,
+    payload: ReportFormat | None = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """生成研究简报（md/html/pdf），仅本人可访问。"""
+    result = await db.execute(
+        select(ResearchRun).options(selectinload(ResearchRun.steps)).where(
+            ResearchRun.id == run_id,
+            ResearchRun.user_id == current_user["user_id"],
+        )
+    )
+    run = result.scalar_one_or_none()
+    if not run:
+        raise HTTPException(status_code=404, detail="科研任务不存在")
+    report_format = payload.format if payload else "pdf"
+    artifacts_result = await db.execute(
+        select(ResearchArtifact).where(
+            ResearchArtifact.run_id == run.id,
+        ).order_by(ResearchArtifact.created_at.asc())
+    )
+    artifacts = [public_artifact(item) for item in artifacts_result.scalars().all()]
+    pipeline_result = await db.execute(
+        select(PipelineRun).where(PipelineRun.run_id == run.id).order_by(PipelineRun.created_at.asc())
+    )
+    pipeline_runs = [
+        {
+            "pipeline_id": item.pipeline_id,
+            "revision": item.revision,
+            "profile": item.profile,
+            "status": item.status,
+            "task_summary": (item.result or {}).get("task_summary", {}),
+            "error": item.error,
+        }
+        for item in pipeline_result.scalars().all()
+    ]
+    markdown = build_brief_markdown(_run_dict(run), artifacts, pipeline_runs)
+    media_map = {
+        "md": ("text/markdown; charset=utf-8", "research-brief.md"),
+        "html": ("text/html; charset=utf-8", "research-brief.html"),
+        "pdf": ("application/pdf", "research-brief.pdf"),
+    }
+    media_type, filename = media_map[report_format]
+    if report_format == "pdf":
+        from ...reporting.pdf import render_pdf
+
+        content = render_pdf(markdown, title=f"研究简报 {run.id}")
+    elif report_format == "html":
+        from ...reporting.pdf import render_html
+
+        content = render_html(markdown).encode("utf-8")
+    else:
+        content = markdown.encode("utf-8")
+    disposition = f"attachment; filename={filename}; filename*=UTF-8''{quote(filename)}"
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": disposition,
+            "Content-Length": str(len(content)),
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "no-store",
         },
     )
 

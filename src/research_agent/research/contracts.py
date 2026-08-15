@@ -183,6 +183,23 @@ CAPABILITIES: dict[str, CapabilitySpec] = {
         timeout_seconds=60,
         cost_units=3,
     ),
+    "pipeline_execution": CapabilitySpec(
+        name="pipeline_execution",
+        title="生产流程执行",
+        description=(
+            "运行固定版本 nf-core 流程（rnaseq/sarek），把 counts/VCF/报告与任务统计"
+            "纳入证据与加密制品，作为下游统计与写作的输入。"
+        ),
+        category="analysis",
+        modalities=("table", "text"),
+        risk=RiskLevel.HIGH,
+        network_access=True,
+        writes_artifacts=True,
+        requires_human_review=True,
+        timeout_seconds=3600,
+        max_retries=0,
+        cost_units=20,
+    ),
     "research_writing": CapabilitySpec(
         name="research_writing",
         title="证据约束科研写作",

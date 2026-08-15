@@ -112,6 +112,7 @@
           <button class="btn btn-primary" v-if="!selected.is_selected" @click="selectTool">＋ 加入工具清单</button>
           <button class="btn btn-primary" v-if="selected.is_selected && !selected.is_deployed" @click="deployTool(true)">⚡ 生成部署计划</button>
           <button class="btn" v-if="selected.is_deployed && isAdmin" @click="verifyInstall">🔍 验证隔离环境</button>
+          <button class="btn" v-if="selected.is_verified && isAdmin" @click="runSmoke" :disabled="smokeBusy">{{ smokeBusy ? '评测中...' : '🔥 运行冒烟评测' }}</button>
           <button class="btn btn-primary" v-if="selected.is_verified && !selected.is_enabled" @click="setEnabled(true)">启用</button>
           <button class="btn" v-if="selected.is_enabled" @click="setEnabled(false)">停用</button>
           <button class="btn btn-danger" v-if="selected.is_deployed && isAdmin" @click="removeDeployment">移除隔离环境</button>
@@ -275,6 +276,7 @@ export default {
     const planVisible = ref(false)
     const deployResult = ref(null)
     const deployBusy = ref(false)
+    const smokeBusy = ref(false)
     const platform = ref(null)
     const platformBusy = ref(false)
     const biocondaPackages = ref('fastqc, samtools, bwa, fastp, bowtie2')
@@ -480,6 +482,22 @@ export default {
         await refreshDetail()
       } catch (e) {
         setNote('验证失败: ' + (e.response?.data?.detail || e.message), 'err')
+      }
+    }
+
+    const runSmoke = async () => {
+      if (!selected.value) return
+      smokeBusy.value = true
+      try {
+        const res = await axios.post(`/api/v1/plugins/${selected.value.id}/smoke`, {})
+        const r = res.data
+        const detail = r.detail || {}
+        const hint = detail.expect_stdout ? `，期望输出含「${detail.expect_stdout}」${detail.stdout_matched ? '（匹配）' : '（未匹配）'}` : ''
+        setNote(r.status === 'passed' ? `✓ 冒烟评测通过: ${r.smoke_id} · exit ${detail.exit_code}${hint} · ${r.duration_ms} ms` : `✗ 冒烟评测失败: ${r.smoke_id} · exit ${detail.exit_code ?? '—'}${hint}`, r.status === 'passed' ? 'ok' : 'err')
+      } catch (e) {
+        setNote('冒烟评测失败: ' + (e.response?.data?.detail || e.message), 'err')
+      } finally {
+        smokeBusy.value = false
       }
     }
 

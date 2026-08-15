@@ -567,6 +567,60 @@ class ArtifactStore(_ArtifactStoreBase):
             "status": "ready",
         }
 
+    def import_bytes(
+        self,
+        name: str,
+        raw: bytes,
+        user_id: int,
+        run_id: str,
+        kind: str = "output",
+    ) -> dict[str, Any]:
+        """Encrypt an external producer's bytes into the store without a DB row.
+
+        Used by capability handlers (e.g. pipeline_execution) to bring bounded
+        pipeline outputs into the encrypted artifact library.  Callers persist
+        the returned dict as a ResearchArtifact row.
+        """
+        safe = self.safe_name(name)
+        suffix = Path(safe).suffix.lower()
+        if suffix not in self.ALLOWED_SUFFIXES:
+            raise ArtifactError(f"Unsupported artifact type: {suffix or 'no extension'}")
+        if len(raw) > self.MAX_BYTES:
+            raise ArtifactError("Artifact exceeds the 25 MiB limit")
+        plaintext = bytes(raw)
+        artifact_id = str(uuid.uuid4())
+        plaintext_sha = hashlib.sha256(plaintext).hexdigest()
+        encrypted = self._encrypt(plaintext, artifact_id, user_id, plaintext_sha)
+        folder = self.root / f"user-{user_id}" / f"run-{run_id}" / "generated"
+        folder.mkdir(parents=True, exist_ok=True)
+        target = (folder / f"{artifact_id}.raenc").resolve()
+        if not target.is_relative_to(self.root):
+            raise ArtifactError("Invalid generated artifact target")
+        temporary = target.with_suffix(".raenc.tmp")
+        try:
+            with temporary.open("wb") as handle:
+                handle.write(encrypted)
+                handle.flush()
+                os.fsync(handle.fileno())
+            temporary.replace(target)
+        except Exception:
+            temporary.unlink(missing_ok=True)
+            target.unlink(missing_ok=True)
+            raise
+        return {
+            "id": artifact_id,
+            "name": safe,
+            "relative_path": target.relative_to(self.root).as_posix(),
+            "media_type": self._media_type(suffix),
+            "kind": kind,
+            "size_bytes": len(plaintext),
+            "sha256": plaintext_sha,
+            "encryption_format": self.ENCRYPTION_FORMAT,
+            "encrypted_sha256": hashlib.sha256(encrypted).hexdigest(),
+            "summary": self.inspect_bytes(safe, plaintext),
+            "status": "ready",
+        }
+
     def inspect_bytes(self, name: str, raw: bytes) -> dict[str, Any]:
         suffix = Path(name).suffix.lower()
         try:

@@ -511,6 +511,226 @@ async def data_analysis(payload: dict[str, Any]) -> CapabilityResult:
     )
 
 
+async def pipeline_execution(payload: dict[str, Any]) -> CapabilityResult:
+    """Run a pinned nf-core pipeline as one research-runtime step.
+
+    The step input carries ``pipeline`` configuration produced by the planner
+    (pipeline_id/revision/profile/parameters/artifact_bindings).  Execution is
+    delegated to PipelineRunManager so the production state machine, preflight,
+    resource limits and cancellation semantics stay authoritative.
+    """
+    import time as _time
+    from datetime import datetime, timezone
+
+    from ..execution.manager import TERMINAL_STATUSES, get_pipeline_manager
+    from ..execution.nextflow import validate_request
+
+    def _utcnow():
+        return datetime.now(timezone.utc).replace(tzinfo=None)
+
+    store: ArtifactStore = payload["artifact_store"]
+    user_id = int(payload["user_id"])
+    run_id = str(payload["run_id"])
+    spec = dict(payload.get("pipeline") or {})
+    if not spec.get("pipeline_id"):
+        return CapabilityResult(
+            status="degraded",
+            output={"message": "未指定生产流程（pipeline_id）。"},
+            warnings=["pipeline_execution 需要步骤输入提供 pipeline 配置。"],
+            confidence=0.0,
+        )
+    pipeline_id = str(spec["pipeline_id"])
+    revision = str(spec.get("revision") or "")
+    profile = str(spec.get("profile") or "docker")
+    parameters = dict(spec.get("parameters") or {})
+    artifact_bindings = dict(spec.get("artifact_bindings") or {})
+    network_allowed = bool(spec.get("network_allowed", payload.get("context") is not None))
+    try:
+        normalized = validate_request(
+            pipeline_id, revision, profile, parameters, artifact_bindings
+        )
+    except ValueError as exc:
+        return CapabilityResult(
+            status="failed",
+            output={"message": str(exc)[:500]},
+            warnings=["流程参数未通过白名单与固定版本校验。"],
+            confidence=0.0,
+        )
+
+    from ..core import db as db_module
+    from ..core.models.db import PipelineRun
+    from ..runtime_coordinator import get_runtime_coordinator
+
+    async with db_module.AsyncSessionLocal() as db:
+        pipeline_run = PipelineRun(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            run_id=run_id,
+            backend="nextflow",
+            pipeline_id=pipeline_id,
+            revision=revision,
+            profile=profile,
+            status="planned",
+            parameters=normalized,
+            artifact_bindings=artifact_bindings,
+            network_allowed=network_allowed,
+            timeout_seconds=min(int(spec.get("timeout_seconds", 3600)), 3600),
+            provenance={
+                "policy": "allowlisted-and-revision-pinned",
+                "source": "research-runtime",
+                "research_run_id": run_id,
+            },
+        )
+        db.add(pipeline_run)
+        await db.commit()
+        manager = get_pipeline_manager()
+        try:
+            await manager.plan_run(pipeline_run.id)
+        except (ValueError, RuntimeError) as exc:
+            pipeline_run.status = "failed"
+            pipeline_run.error = str(exc)[:4000]
+            pipeline_run.completed_at = _utcnow()
+            await db.commit()
+            return CapabilityResult(
+                status="failed",
+                output={"pipeline_run_id": pipeline_run.id, "message": str(exc)[:500]},
+                warnings=["生产流程计划失败。"],
+                confidence=0.0,
+            )
+
+        readiness = await manager.backend.preflight(
+            pipeline_id=pipeline_id,
+            revision=revision,
+            profile=profile,
+            network_allowed=network_allowed,
+        )
+        if not readiness.get("ready"):
+            pipeline_run.status = "cancelled"
+            pipeline_run.completed_at = _utcnow()
+            pipeline_run.result = {"status": "cancelled", "error": "preflight-failed"}
+            await db.commit()
+            issues = "; ".join(readiness.get("issues") or ["环境未就绪"])
+            return CapabilityResult(
+                status="degraded",
+                output={"pipeline_run_id": pipeline_run.id, "preflight": readiness},
+                warnings=[f"生产流程预检未通过: {issues}。请先完成环境体检（WSL2/Nextflow/容器）。"],
+                confidence=0.0,
+            )
+
+        # A long-running pipeline holds one research slot while waiting.
+        # get_runtime_coordinator() grants up to six process-wide leases; the
+        # pipeline's own "pipeline" lease is acquired inside the manager, so a
+        # fully saturated desktop would wait here instead of overcommitting.
+        async with get_runtime_coordinator().lease("research", f"{run_id}:pipeline-wait"):
+            pipeline_run.status = "queued"
+            await db.commit()
+            manager.submit(pipeline_run.id)
+
+            deadline = _time.monotonic() + max(
+                0,
+                min(int(spec.get("timeout_seconds", 3600)), 3600) - 30,
+            )
+            poll_interval = max(0, min(int(spec.get("poll_interval", 5)), 30))
+            while True:
+                await asyncio.sleep(poll_interval)
+                if _time.monotonic() >= deadline:
+                    manager.cancel(pipeline_run.id)
+                    await db.refresh(pipeline_run)
+                    break
+                await db.refresh(pipeline_run)
+                if pipeline_run.status in TERMINAL_STATUSES:
+                    break
+
+    status = str(pipeline_run.status)
+    exit_code = pipeline_run.exit_code
+    result = dict(pipeline_run.result or {})
+    task_summary = result.get("task_summary") or {}
+    pipeline_artifacts = list(result.get("artifacts") or [])
+    warnings = []
+    if pipeline_run.error:
+        warnings.append(f"生产流程执行未完全成功: {str(pipeline_run.error)[:400]}")
+    if task_summary.get("failed"):
+        failed_names = [item.get("name", "?") for item in task_summary["failed"][:5]]
+        warnings.append(f"{len(task_summary['failed'])} 个流程任务失败: {', '.join(failed_names)}")
+    if result.get("manifest_truncated"):
+        warnings.append("结果清单因有界收集被截断，未记录全部输出文件。")
+
+    generated = []
+    skipped = []
+    backend = manager.backend
+    for item in pipeline_artifacts[:40]:
+        name = str(item.get("name") or Path(str(item.get("relative_path") or "")).name)
+        suffix = Path(name).suffix.lower()
+        size = int(item.get("size_bytes") or 0)
+        if suffix not in store.ALLOWED_SUFFIXES or size > store.MAX_BYTES:
+            skipped.append(name)
+            continue
+        try:
+            path = backend.resolve_artifact(user_id, pipeline_run.id, str(item["relative_path"]))
+            raw = await asyncio.to_thread(path.read_bytes)
+            imported = await asyncio.to_thread(
+                store.import_bytes, name, raw, user_id, run_id, "pipeline"
+            )
+            generated.append(imported)
+        except Exception:
+            skipped.append(name)
+    if skipped:
+        warnings.append(
+            f"{len(skipped)} 个流程产物未纳入加密制品（类型不支持或超过 25 MiB 上限）。"
+        )
+
+    completed = status == "completed" and exit_code == 0
+    evidence: list[dict[str, Any]] = []
+    if completed or task_summary.get("tasks"):
+        evidence.append(
+            {
+                "id": pipeline_run.id,
+                "source_type": "pipeline_execution",
+                "locator": f"pipeline-run/{pipeline_run.id}",
+                "title": f"{pipeline_id} {revision} 执行结果",
+                "excerpt": (
+                    f"Nextflow {pipeline_id}@{revision} profile={profile} "
+                    f"tasks={task_summary.get('tasks', '?')} "
+                    f"statuses={task_summary.get('statuses', {})}"
+                )[:1600],
+                "doi": "",
+                "relevance": 0.95 if completed else 0.6,
+                "quality_flags": (
+                    []
+                    if completed
+                    else ["执行未完全成功，结果需结合失败任务与人工复核使用"]
+                ),
+            }
+        )
+
+    return CapabilityResult(
+        status="completed" if completed and not warnings else "degraded",
+        output={
+            "pipeline_run_id": pipeline_run.id,
+            "pipeline": pipeline_id,
+            "revision": revision,
+            "profile": profile,
+            "status": status,
+            "exit_code": exit_code,
+            "task_summary": task_summary,
+            "provenance": dict(pipeline_run.provenance or {}),
+            "artifact_summary": {
+                "recorded": len(pipeline_artifacts),
+                "imported": len(generated),
+                "skipped": len(skipped),
+            },
+        },
+        evidence=evidence,
+        warnings=warnings,
+        confidence=round(
+            0.95 * (0.9 if completed else 0.3)
+            - 0.05 * len(warnings),
+            3,
+        ),
+        generated_artifacts=generated,
+    )
+
+
 async def research_writing(payload: dict[str, Any]) -> CapabilityResult:
     objective = str(payload.get("objective") or "").strip()
     dependencies = payload.get("dependency_outputs") or {}
@@ -690,6 +910,7 @@ HANDLERS = {
     "hypothesis_meta_review": hypothesis_meta_review,
     "experimental_design": experimental_design,
     "data_analysis": data_analysis,
+    "pipeline_execution": pipeline_execution,
     "research_writing": research_writing,
     "integrity_check": integrity_check,
 }

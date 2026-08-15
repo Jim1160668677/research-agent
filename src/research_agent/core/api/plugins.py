@@ -20,30 +20,32 @@
 - POST   /plugins/{id}/upgrade     升级到最新版
 """
 
+
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
-from loguru import logger
 
-from ..db import get_db
-from ..models.db import Plugin as PluginModel
-from ...plugins.manager import PluginManager
-from ...plugins.deployer import Deployer
+from ...plugins.catalog_sync import BiocondaCatalogSync
 from ...plugins.dependency_resolver import DependencyResolver
+from ...plugins.deployer import Deployer
+from ...plugins.manager import PluginManager
 from ...plugins.manifest import (
     CapabilityManifestV1,
     manifest_digest,
     validated_manifest_for_plugin,
 )
-from ...plugins.catalog_sync import BiocondaCatalogSync
 from ...plugins.platform_probe import PlatformCapabilityProbe
-from ..models.schemas import (
-    PluginResponse,
-    PluginUpdate, PluginInstallRequest, PluginReviewCreate,
-)
 from ..auth import get_current_user, require_role
+from ..db import get_db
+from ..models.db import Plugin as PluginModel
+from ..models.schemas import (
+    PluginInstallRequest,
+    PluginResponse,
+    PluginReviewCreate,
+    PluginUpdate,
+)
 
 router = APIRouter()
 
@@ -51,7 +53,7 @@ router = APIRouter()
 class PluginUpgradeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    target_version: Optional[str] = None
+    target_version: str | None = None
 
 
 class PluginDeployRequest(BaseModel):
@@ -60,15 +62,21 @@ class PluginDeployRequest(BaseModel):
     simulate: bool = True
 
 
+class PluginSmokeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    smoke_id: str | None = None
+
+
 class BiocondaSyncRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    packages: List[str] = Field(
+    packages: list[str] = Field(
         default_factory=lambda: ["fastqc", "samtools", "bwa", "fastp", "bowtie2"],
         min_length=1,
         max_length=100,
     )
-    subdirs: List[str] = Field(
+    subdirs: list[str] = Field(
         default_factory=lambda: ["linux-64", "noarch"],
         min_length=1,
         max_length=5,
@@ -144,12 +152,12 @@ async def platform_capabilities(
     return await PlatformCapabilityProbe().probe(deep=deep)
 
 
-@router.get("/", response_model=List[PluginResponse])
+@router.get("/", response_model=list[PluginResponse])
 async def list_plugins(
-    category: Optional[str] = Query(None, description="按分类筛选"),
-    status: Optional[str] = Query(None, description="按状态筛选"),
-    search: Optional[str] = Query(None, description="搜索关键词"),
-    sort: Optional[str] = Query(None, description="排序: rating/downloads/name/newest"),
+    category: str | None = Query(None, description="按分类筛选"),
+    status: str | None = Query(None, description="按状态筛选"),
+    search: str | None = Query(None, description="搜索关键词"),
+    sort: str | None = Query(None, description="排序: rating/downloads/name/newest"),
     installed_only: bool = Query(False, description="只看已安装"),
     update_available_only: bool = Query(False, description="只看有更新的"),
     db: AsyncSession = Depends(get_db),
@@ -364,7 +372,7 @@ async def remove_version(
 @router.post("/{plugin_id}/upgrade")
 async def upgrade_plugin(
     plugin_id: int,
-    body: Optional[PluginUpgradeRequest] = Body(default=None),
+    body: PluginUpgradeRequest | None = Body(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -468,7 +476,7 @@ async def resolve_dependencies(
 @router.post("/{plugin_id}/deploy")
 async def deploy_plugin(
     plugin_id: int,
-    body: Optional[PluginDeployRequest] = Body(default=None),
+    body: PluginDeployRequest | None = Body(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -553,6 +561,45 @@ async def verify_installation(
         raise HTTPException(status_code=404, detail="Plugin not found")
     verification = await deployer.verify_installation(plugin_obj)
     return {"plugin_id": plugin_id, "name": plugin_obj.name, **verification}
+
+
+@router.post("/{plugin_id}/smoke")
+async def run_plugin_smoke(
+    plugin_id: int,
+    body: PluginSmokeRequest | None = Body(default=None),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_role("admin")),
+):
+    """运行插件的断言型冒烟用例（RA-Eval v1）。
+
+    仅限已部署环境的插件；用例经白名单校验，argv-only 受管执行。
+    """
+    from ...plugins.smoke_runner import SmokeRunner
+
+    result = await db.execute(select(PluginModel).where(PluginModel.id == plugin_id))
+    plugin_obj = result.scalar_one_or_none()
+    if not plugin_obj:
+        raise HTTPException(status_code=404, detail="Plugin not found")
+    try:
+        return await SmokeRunner(db, user_id=current_user["user_id"]).run(
+            plugin_obj, body.smoke_id if body else None
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get("/{plugin_id}/smoke-history")
+async def plugin_smoke_history(
+    plugin_id: int,
+    limit: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """插件冒烟评测历史（最近 N 条）"""
+    from ...plugins.smoke_runner import SmokeRunner
+
+    history = await SmokeRunner(db, user_id=current_user["user_id"]).history(plugin_id, limit)
+    return {"plugin_id": plugin_id, "history": history}
 
 
 __all__ = ["router"]

@@ -106,6 +106,7 @@ const toolsNav = computed(() => [
   { path: '/plugins', label: '插件市场', icon: '◇', section: '资源与工具' },
   { path: '/skills', label: '技能库', icon: '✦', section: '资源与工具' },
   { path: '/ncbi', label: 'NCBI 数据', icon: '◎', section: '资源与工具' },
+  { path: '/health', label: '环境体检', icon: '♥', section: '资源与工具' },
   { path: '/llm', label: '模型设置', icon: '⚙', section: '系统' },
   ...(session.user?.role === 'admin'
     ? [{ path: '/security', label: '数据安全', icon: '◆', section: '系统' }]

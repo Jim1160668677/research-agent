@@ -162,11 +162,24 @@ class ResearchPlanner:
                 )
             )
 
+        pipeline_request = context.get("pipeline")
+        if isinstance(pipeline_request, dict) and pipeline_request.get("pipeline_id"):
+            pipeline_dependencies = ["intake"] if "multimodal" in selected else []
+            steps.append(
+                PlanStep(
+                    key="pipeline",
+                    title=CAPABILITIES["pipeline_execution"].title,
+                    capability="pipeline_execution",
+                    dependencies=pipeline_dependencies,
+                    input_data={"pipeline": pipeline_request},
+                )
+            )
+
         if "writing" in selected:
             dependencies = [
                 step.key
                 for step in steps
-                if step.key in {"literature", "meta_review", "experiment", "data"}
+                if step.key in {"literature", "meta_review", "experiment", "data", "pipeline"}
             ]
             steps.append(
                 PlanStep(

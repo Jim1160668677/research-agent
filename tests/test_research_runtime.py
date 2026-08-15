@@ -1,5 +1,8 @@
-"""科研任务运行时、证据契约与工作台 API 测试。"""
+﻿"""科研任务运行时、证据契约与工作台 API 测试。"""
 
+
+import asyncio
+from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -108,6 +111,213 @@ def test_artifact_store_profiles_table_and_blocks_traversal(tmp_path):
 def client():
     with TestClient(create_app()) as value:
         yield value
+
+
+def test_planner_adds_pipeline_execution_step():
+    plan = ResearchPlanner().plan(
+        "对上传的样本表运行 RNA-seq 流程并生成差异表达分析框架",
+        domains=["data", "writing", "integrity"],
+        artifact_ids=["samples"],
+        context={
+            "pipeline": {
+                "pipeline_id": "nf-core/rnaseq",
+                "revision": "3.26.0",
+                "profile": "docker",
+                "parameters": {"test_profile": True, "aligner": "star_salmon"},
+                "artifact_bindings": {"input": "samples"},
+            }
+        },
+    )
+    value = plan.to_dict()
+    assert ResearchPlanner.validate_plan(value) == []
+    keys = [step["key"] for step in value["steps"]]
+    assert keys == ["intake", "data", "pipeline", "writing", "integrity"]
+    pipeline_step = next(step for step in value["steps"] if step["key"] == "pipeline")
+    assert pipeline_step["capability"] == "pipeline_execution"
+    assert pipeline_step["dependencies"] == ["intake"]
+    writing_step = next(step for step in value["steps"] if step["key"] == "writing")
+    assert "pipeline" in writing_step["dependencies"]
+    assert "pipeline" in value["review_gates"]
+    assert "pipeline_execution" in value["policy"]["allowed_capabilities"]
+
+
+def test_planner_ignores_pipeline_without_pipeline_id():
+    plan = ResearchPlanner().plan(
+        "分析数据并生成写作框架",
+        context={"pipeline": {"profile": "docker"}},
+    )
+    assert all(step.capability != "pipeline_execution" for step in plan.steps)
+
+
+class _FakePipelineBackend:
+    def __init__(self, readiness, artifact_path=None):
+        self._readiness = readiness
+        self._artifact_path = artifact_path
+
+    async def preflight(self, **kwargs):
+        return self._readiness
+
+    def resolve_artifact(self, user_id, run_id, relative_path):
+        if self._artifact_path is None:
+            raise ValueError("pipeline artifact unavailable")
+        return self._artifact_path
+
+
+class _FakePipelineManager:
+    def __init__(self, backend, final_status="completed"):
+        self.backend = backend
+        self._final_status = final_status
+        self.submitted: list[str] = []
+
+    async def plan_run(self, run_id):
+        return {"status": "planned"}
+
+    def submit(self, run_id):
+        self.submitted.append(run_id)
+
+        async def _finish():
+            await asyncio.sleep(0)
+            from sqlalchemy import select
+
+            from research_agent.core import db as db_module
+            from research_agent.core.models.db import PipelineRun
+
+            async with db_module.AsyncSessionLocal() as db:
+                result = await db.execute(select(PipelineRun).where(PipelineRun.id == run_id))
+                run = result.scalar_one()
+                run.status = self._final_status
+                run.exit_code = 0 if self._final_status == "completed" else 1
+                run.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                run.result = {
+                    "artifacts": [
+                        {
+                            "name": "counts.tsv",
+                            "kind": "result",
+                            "relative_path": "results/counts.tsv",
+                            "size_bytes": 9,
+                            "sha256": "dummy",
+                        }
+                    ],
+                    "task_summary": {
+                        "tasks": 234,
+                        "statuses": {"COMPLETED": 234},
+                        "failed": [],
+                    },
+                }
+                run.provenance = {"pipeline": "nf-core/rnaseq", "revision": "3.26.0"}
+                await db.commit()
+
+        asyncio.get_running_loop().create_task(_finish())
+
+    def cancel(self, run_id):
+        return False
+
+
+@pytest.mark.asyncio
+async def test_pipeline_execution_handler_degraded_on_preflight_failure(
+    tmp_path, monkeypatch
+):
+    from research_agent.core.db import init_db
+    from research_agent.research.services import pipeline_execution
+
+    await init_db()
+    manager = _FakePipelineManager(
+        _FakePipelineBackend({"ready": False, "issues": ["nextflow missing"]})
+    )
+    monkeypatch.setattr(
+        "research_agent.execution.manager.get_pipeline_manager", lambda: manager
+    )
+    result = await pipeline_execution({
+        "pipeline": {
+            "pipeline_id": "nf-core/rnaseq",
+            "revision": "3.26.0",
+            "profile": "docker",
+            "parameters": {"genome": "GRCh38"},
+            "artifact_bindings": {"input": "samples"},
+            "timeout_seconds": 60,
+            "poll_interval": 0,
+        },
+        "run_id": "research-run-1",
+        "user_id": 1,
+        "artifact_store": ArtifactStore(tmp_path / "artifacts"),
+    })
+    assert result.status == "degraded"
+    assert "预检未通过" in result.warnings[0]
+    assert manager.submitted == []
+
+
+@pytest.mark.asyncio
+async def test_pipeline_execution_handler_completed_imports_artifacts(
+    tmp_path, monkeypatch
+):
+    from research_agent.core.db import init_db
+    from research_agent.research.services import pipeline_execution
+
+    await init_db()
+    artifact_path = tmp_path / "counts.tsv"
+    artifact_path.write_text("gene\tcount\nA\t1\n", encoding="utf-8")
+    manager = _FakePipelineManager(
+        _FakePipelineBackend({"ready": True, "issues": []}, artifact_path),
+        final_status="completed",
+    )
+    monkeypatch.setattr(
+        "research_agent.execution.manager.get_pipeline_manager", lambda: manager
+    )
+    result = await pipeline_execution({
+        "pipeline": {
+            "pipeline_id": "nf-core/rnaseq",
+            "revision": "3.26.0",
+            "profile": "docker",
+            "parameters": {"test_profile": True},
+            "artifact_bindings": {"input": "samples"},
+            "timeout_seconds": 60,
+            "poll_interval": 0,
+        },
+        "run_id": "research-run-2",
+        "user_id": 1,
+        "artifact_store": ArtifactStore(tmp_path / "artifacts"),
+    })
+    assert result.status == "completed"
+    assert len(manager.submitted) == 1
+    assert len(result.generated_artifacts) == 1
+    imported = result.generated_artifacts[0]
+    assert imported["name"] == "counts.tsv"
+    assert imported["encryption_format"] == ArtifactStore.ENCRYPTION_FORMAT
+    assert imported["kind"] == "pipeline"
+    assert any(item["source_type"] == "pipeline_execution" for item in result.evidence)
+    assert result.output["task_summary"]["tasks"] == 234
+    assert result.confidence > 0.8
+
+
+@pytest.mark.asyncio
+async def test_pipeline_execution_handler_failed_when_run_fails(tmp_path, monkeypatch):
+    from research_agent.core.db import init_db
+    from research_agent.research.services import pipeline_execution
+
+    await init_db()
+    manager = _FakePipelineManager(
+        _FakePipelineBackend({"ready": True, "issues": []}),
+        final_status="failed",
+    )
+    monkeypatch.setattr(
+        "research_agent.execution.manager.get_pipeline_manager", lambda: manager
+    )
+    result = await pipeline_execution({
+        "pipeline": {
+            "pipeline_id": "nf-core/rnaseq",
+            "revision": "3.26.0",
+            "profile": "docker",
+            "parameters": {"genome": "GRCh38"},
+            "artifact_bindings": {"input": "samples"},
+            "timeout_seconds": 60,
+            "poll_interval": 0,
+        },
+        "run_id": "research-run-3",
+        "user_id": 1,
+        "artifact_store": ArtifactStore(tmp_path / "artifacts"),
+    })
+    assert result.status == "degraded"
+    assert result.confidence < 0.5
 
 
 def test_research_api_plan_artifact_and_user_scoped_run(client):
