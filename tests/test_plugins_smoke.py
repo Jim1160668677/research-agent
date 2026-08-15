@@ -18,6 +18,7 @@ def test_validate_smoke_spec_accepts_benign_case():
         "args": ["--version"],
         "expect_exit": 0,
         "expect_stdout": "FastQC",
+        "expect_stderr": "WARNING|error:",
         "timeout_s": 60,
     })
     assert ok, reason
@@ -47,7 +48,7 @@ def test_validate_smoke_spec_rejects_injection_and_bad_shapes(spec):
 async def test_smoke_runner_passes_and_records(tmp_path):
     await init_db()
     async with __import__("research_agent.core.db", fromlist=["AsyncSessionLocal"]).AsyncSessionLocal() as db:
-        plugin = await db.scalar(select(Plugin).where(Plugin.name == "fastqc"))
+        plugin = await db.scalar(select(Plugin).where(Plugin.name == "samtools"))
         prefix = tmp_path / "plugin-env"
         prefix.mkdir(parents=True)
         await transition(db, plugin.id, 1, "deploying", version=plugin.version,
@@ -58,13 +59,14 @@ async def test_smoke_runner_passes_and_records(tmp_path):
 
         runner = SmokeRunner(db, user_id=1)
         async def _fake_run(argv, timeout=60):
-            return 0, "FastQC v0.12.1", ""
+            return 0, "samtools 1.17\nUsing htslib 1.17-1", ""
         runner.deployer._run_command = _fake_run
 
         result = await runner.run(plugin)
         assert result["status"] == "passed"
         assert result["detail"]["exit_code"] == 0
         assert result["detail"]["stdout_matched"] is True
+        assert result["detail"]["expect_stderr"] == "^"
         assert result["duration_ms"] >= 0
 
         rows = await db.execute(select(PluginSmokeRun).where(PluginSmokeRun.plugin_id == plugin.id))
@@ -164,3 +166,72 @@ def test_smoke_api_scopes_admin_and_requires_deployment(monkeypatch):
         history = client.get(f"/api/v1/plugins/{fastqc['id']}/smoke-history", headers=member_headers)
         assert history.status_code == 200
         assert history.json()["history"] == []
+
+
+def test_validate_smoke_spec_accepts_regex_patterns():
+    ok, reason = validate_smoke_spec({
+        "id": "regex",
+        "command": "samtools",
+        "args": ["--version"],
+        "expect_stdout": r"samtools\s+\d+\.\d+",
+        "expect_stderr": r"^error:",
+        "timeout_s": 30,
+    })
+    assert ok, reason
+
+
+def test_validate_smoke_spec_rejects_invalid_regex():
+    bad_specs = [
+        {"command": "x", "expect_stdout": "[invalid("},
+        {"command": "x", "expect_stderr": "*"},
+        {"command": "x", "expect_stderr": "(?P<unclosed>"},
+    ]
+    for spec in bad_specs:
+        ok, reason = validate_smoke_spec(spec)
+        assert not ok, f"should reject {spec}: {reason}"
+
+
+@pytest.mark.asyncio
+async def test_smoke_runner_matches_regex_pattern(tmp_path):
+    await init_db()
+    async with __import__("research_agent.core.db", fromlist=["AsyncSessionLocal"]).AsyncSessionLocal() as db:
+        plugin = await db.scalar(select(Plugin).where(Plugin.name == "samtools"))
+        prefix = tmp_path / "plugin-env"
+        prefix.mkdir(parents=True)
+        await transition(db, plugin.id, 1, "deploying", version=plugin.version,
+                         config={"environment_prefix": str(prefix), "method": "conda"})
+        await transition(db, plugin.id, 1, DEPLOYED, version=plugin.version,
+                         config={"environment_prefix": str(prefix), "method": "conda"})
+        await db.commit()
+
+        runner = SmokeRunner(db, user_id=1)
+        async def _fake_run(argv, timeout=60):
+            return 0, "samtools 1.17\nUsing htslib 1.17-1", ""
+        runner.deployer._run_command = _fake_run
+
+        result = await runner.run(plugin)
+        assert result["status"] == "passed"
+        assert result["detail"]["stdout_matched"] is True
+
+
+@pytest.mark.asyncio
+async def test_smoke_runner_matches_stderr_pattern(tmp_path):
+    await init_db()
+    async with __import__("research_agent.core.db", fromlist=["AsyncSessionLocal"]).AsyncSessionLocal() as db:
+        plugin = await db.scalar(select(Plugin).where(Plugin.name == "fastqc"))
+        prefix = tmp_path / "plugin-env"
+        prefix.mkdir(parents=True)
+        await transition(db, plugin.id, 1, "deploying", version=plugin.version,
+                         config={"environment_prefix": str(prefix), "method": "conda"})
+        await transition(db, plugin.id, 1, DEPLOYED, version=plugin.version,
+                         config={"environment_prefix": str(prefix), "method": "conda"})
+        await db.commit()
+
+        runner = SmokeRunner(db, user_id=1)
+        async def _fake_run(argv, timeout=60):
+            return 0, "FastQC v0.12.1\n", "WARNING: fastq file missing\n"
+        runner.deployer._run_command = _fake_run
+
+        result = await runner.run(plugin)
+        assert result["status"] == "passed"
+        assert result["detail"]["expect_stderr"] == "WARNING:|error:|no such file"

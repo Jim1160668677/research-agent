@@ -1,7 +1,12 @@
 """插件冒烟评测：白名单命令 + 受管执行 + 断言记录。
 
 冒烟用例 SmokeTest 结构：
-{id, command(单一可执行文件名), args, expect_exit, expect_stdout(子串), timeout_s}
+{
+  id, command, args, expect_exit,
+  expect_stdout: 字符串，解释为正则表达式（v2）；
+  expect_stderr: 可选字符串，正则表达式匹配 stderr；
+  timeout_s (默认 60)
+}
 
 执行复用 Deployer 的受管子进程（argv-only、超时、输出有界），
 结果写入 PluginSmokeRun；未配置用例时退化为 install_method.probe
@@ -26,17 +31,23 @@ _SNIPPET_LIMIT = 500
 
 
 def validate_smoke_spec(spec: Any) -> tuple[bool, str]:
-    """白名单校验冒烟用例：拒绝 shell 元字符与空参数。"""
+    """白名单校验冒烟用例：拒绝 shell 元字符与无效正则。"""
     if not isinstance(spec, dict):
         return False, "smoke spec 必须是映射"
     command = spec.get("command")
     if not isinstance(command, str) or not _COMMAND_PATTERN.fullmatch(command):
         return False, "command 必须是单一可执行文件名（仅字母/数字/._-）"
-    expect_stdout = spec.get("expect_stdout")
-    if expect_stdout is not None and not isinstance(expect_stdout, str):
-        return False, "expect_stdout 必须是字符串"
-    if expect_stdout is not None and not expect_stdout.strip():
-        return False, "expect_stdout 不能为空"
+    for field in ("expect_stdout", "expect_stderr"):
+        value = spec.get(field)
+        if value is not None and not isinstance(value, str):
+            return False, f"{field} 必须是字符串"
+        if value is not None and not value.strip():
+            return False, f"{field} 不能为空"
+        if value is not None:
+            try:
+                re.compile(value)
+            except re.error as exc:
+                return False, f"{field} 不是合法的正则表达式: {exc}"
     args = spec.get("args", [])
     if not isinstance(args, list) or not all(isinstance(item, str) for item in args):
         return False, "args 必须是字符串列表"
@@ -138,9 +149,14 @@ class SmokeRunner:
 
         expect_exit = int(target.get("expect_exit", 0))
         expect_stdout = target.get("expect_stdout")
+        expect_stderr = target.get("expect_stderr")
         matched = True
         if expect_stdout:
-            matched = bool(re.search(re.escape(expect_stdout), f"{stdout}\n{stderr}"))
+            pat = re.compile(expect_stdout)
+            matched = bool(pat.search(f"{stdout}\n{stderr}"))
+        if expect_stderr and matched:
+            pat = re.compile(expect_stderr)
+            matched = bool(pat.search(stderr))
         status = "passed" if code == expect_exit and matched else "failed"
         detail = {
             "command": command,
@@ -149,6 +165,7 @@ class SmokeRunner:
             "exit_code": code,
             "expect_exit": expect_exit,
             "expect_stdout": expect_stdout,
+            "expect_stderr": expect_stderr,
             "stdout_matched": matched,
             "stdout": stdout[:_SNIPPET_LIMIT],
             "stderr": stderr[:_SNIPPET_LIMIT],

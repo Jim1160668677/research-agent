@@ -104,7 +104,9 @@ BUILTIN_PLUGINS = [
                            "probe": {"command": "fastqc", "args": ["--version"]}},
         "smoke_tests": [
             {"id": "version", "command": "fastqc", "args": ["--version"],
-             "expect_exit": 0, "expect_stdout": "FastQC", "timeout_s": 60},
+             "expect_exit": 0, "expect_stdout": "FastQC",
+             "expect_stderr": "WARNING:|error:|no such file",
+             "timeout_s": 60},
         ],
         "downloads": 1280, "rating_avg": 4.7, "rating_count": 86,
         "dependencies": [],
@@ -199,7 +201,9 @@ BUILTIN_PLUGINS = [
                            "probe": {"command": "samtools", "args": ["--version"]}},
         "smoke_tests": [
             {"id": "version", "command": "samtools", "args": ["--version"],
-             "expect_exit": 0, "expect_stdout": "samtools", "timeout_s": 60},
+             "expect_exit": 0, "expect_stdout": "samtools\\s+\\d+\\.\\d+",
+             "expect_stderr": "^",
+             "timeout_s": 60},
         ],
         "downloads": 2104, "rating_avg": 4.9, "rating_count": 148,
         "dependencies": [{"name": "htslib", "version": ">=1.19"}],
@@ -283,7 +287,8 @@ BUILTIN_PLUGINS = [
                            "probe": {"command": "kallisto", "args": ["version"]}},
         "smoke_tests": [
             {"id": "version", "command": "kallisto", "args": ["version"],
-             "expect_exit": 0, "expect_stdout": "kallisto", "timeout_s": 60},
+             "expect_exit": 0, "expect_stdout": "kallisto\\sv[\\d.]+",
+             "timeout_s": 60},
         ],
         "downloads": 743, "rating_avg": 4.6, "rating_count": 49,
         "dependencies": [],
