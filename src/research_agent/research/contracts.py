@@ -104,7 +104,7 @@ CAPABILITIES: dict[str, CapabilitySpec] = {
         category="multimodal",
         modalities=("text", "table", "image", "pdf"),
         writes_artifacts=False,
-        timeout_seconds=30,
+        timeout_seconds=60,
         cost_units=1,
     ),
     "evidence_review": CapabilitySpec(

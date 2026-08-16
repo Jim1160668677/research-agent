@@ -349,6 +349,202 @@ async def test_pipeline_evolution_handler_timeout_pattern_detection(tmp_path, mo
     assert any("超时" in s for s in result.output["signals"])
 
 
+@pytest.mark.asyncio
+async def test_pipeline_evolution_handler_code_improvement_on_repeated_failure(tmp_path, monkeypatch):
+    """When a pipeline fails 2+ times, pipeline_evolution generates a code-level proposal."""
+    from research_agent.core.db import init_db
+    from research_agent.research.services import pipeline_evolution
+    from research_agent.research.artifacts import ArtifactStore
+    from research_agent.core.models.db import PipelineRun
+    from research_agent.core import db as db_module
+    from datetime import datetime, timezone
+
+    await init_db()
+
+    async with db_module.AsyncSessionLocal() as db:
+        runs = [
+            PipelineRun(
+                id="code-fail-1", user_id=1, run_id="code-fail-run-1",
+                pipeline_id="nf-core/rnaseq", revision="3.26.0", profile="docker",
+                status="failed",
+                parameters={"max_memory": "4.Gb"},
+                error="Executor: java.lang.OutOfMemoryError: Java heap space (killed)",
+                created_at=datetime(2026, 8, 10, 10, 0, 0).replace(tzinfo=timezone.utc).replace(tzinfo=None),
+            ),
+            PipelineRun(
+                id="code-fail-2", user_id=1, run_id="code-fail-run-2",
+                pipeline_id="nf-core/rnaseq", revision="3.26.0", profile="docker",
+                status="failed",
+                parameters={"max_memory": "4.Gb"},
+                error="Executor: java.lang.OutOfMemoryError: Java heap space (killed)",
+                created_at=datetime(2026, 8, 12, 10, 0, 0).replace(tzinfo=timezone.utc).replace(tzinfo=None),
+            ),
+        ]
+        for r in runs:
+            db.add(r)
+        await db.commit()
+
+    # Mock LLM provider
+    class _FakeLLMResponse:
+        content = '{"suggested_diff": "Increase max_memory in main.nf", "change_description": "建议使用8Gb内存替换4Gb配置", "confidence": 0.85, "target_file": "main.nf"}'
+
+    class _FakeProvider:
+        async def chat(self, messages):
+            return _FakeLLMResponse()
+
+    def _fake_get_provider(name, **kwargs):
+        return _FakeProvider()
+
+    monkeypatch.setattr("research_agent.llm.provider.get_provider", _fake_get_provider)
+
+    class _FakeKeyManager:
+        async def get_key(self, provider_name):
+            return "test-api-key"
+
+    monkeypatch.setattr("research_agent.llm.keys.get_key_manager", lambda *a, **k: _FakeKeyManager())
+
+    result = await pipeline_evolution({
+        "run_id": "code-fail-run-2",
+        "user_id": 1,
+        "artifact_store": ArtifactStore(tmp_path / "artifacts"),
+    })
+    assert result.status == "completed"
+    assert len(result.output["proposal_ids"]) >= 1
+    assert any("代码进化" in s for s in result.output["signals"])
+    assert result.output.get("code_proposal_ids") is not None
+    assert len(result.output["code_proposal_ids"]) >= 1
+
+    # Verify proposal type
+    async with db_module.AsyncSessionLocal() as db:
+        from sqlalchemy import select
+        from research_agent.core.models.db import LearningProposal
+        prop_result = await db.execute(
+            select(LearningProposal).where(LearningProposal.source_run_id == "code-fail-run-2")
+        )
+        proposals = prop_result.scalars().all()
+        code_props = [p for p in proposals if (p.proposed_change or {}).get("proposal_type") == "pipeline_code_improvement"]
+        assert len(code_props) >= 1
+        assert code_props[0].proposed_change["pipeline_id"] == "nf-core/rnaseq"
+        assert code_props[0].proposed_change["confidence"] == 0.85
+
+
+@pytest.mark.asyncio
+async def test_pipeline_evolution_handler_code_improvement_llm_fallback(tmp_path, monkeypatch):
+    """When LLM is unavailable, code-level proposal is still generated as fallback."""
+    from research_agent.core.db import init_db
+    from research_agent.research.services import pipeline_evolution
+    from research_agent.research.artifacts import ArtifactStore
+    from research_agent.core.models.db import PipelineRun
+    from research_agent.core import db as db_module
+    from datetime import datetime, timezone
+
+    await init_db()
+
+    async with db_module.AsyncSessionLocal() as db:
+        runs = [
+            PipelineRun(
+                id="fallback-fail-1", user_id=1, run_id="fallback-run-1",
+                pipeline_id="nf-core/sarek", revision="3.9.0", profile="conda",
+                status="failed",
+                parameters={},
+                error="Process timed out",
+                created_at=datetime(2026, 8, 10, 10, 0, 0).replace(tzinfo=timezone.utc).replace(tzinfo=None),
+            ),
+            PipelineRun(
+                id="fallback-fail-2", user_id=1, run_id="fallback-run-2",
+                pipeline_id="nf-core/sarek", revision="3.9.0", profile="conda",
+                status="failed",
+                parameters={},
+                error="Process timed out",
+                created_at=datetime(2026, 8, 12, 10, 0, 0).replace(tzinfo=timezone.utc).replace(tzinfo=None),
+            ),
+        ]
+        for r in runs:
+            db.add(r)
+        await db.commit()
+
+    # Mock LLM to raise exception (simulating unavailable API)
+    def _fake_get_provider(name, **kwargs):
+        raise RuntimeError("API key not configured")
+
+    monkeypatch.setattr("research_agent.llm.provider.get_provider", _fake_get_provider)
+
+    class _FakeKeyManager:
+        async def get_key(self, provider_name):
+            return "test-api-key"
+
+    monkeypatch.setattr("research_agent.llm.keys.get_key_manager", lambda *a, **k: _FakeKeyManager())
+
+    result = await pipeline_evolution({
+        "run_id": "fallback-run-2",
+        "user_id": 1,
+        "artifact_store": ArtifactStore(tmp_path / "artifacts"),
+    })
+    assert result.status == "completed"
+    # Should still generate fallback proposal even though LLM failed
+    assert len(result.output["proposal_ids"]) >= 1
+    assert any("代码进化" in s or "重复失败" in s for s in result.output["signals"])
+
+    # Verify fallback proposal was stored
+    async with db_module.AsyncSessionLocal() as db:
+        from sqlalchemy import select
+        from research_agent.core.models.db import LearningProposal
+        prop_result = await db.execute(
+            select(LearningProposal).where(LearningProposal.source_run_id == "fallback-run-2")
+        )
+        proposals = prop_result.scalars().all()
+        code_props = [p for p in proposals if (p.proposed_change or {}).get("proposal_type") == "pipeline_code_improvement"]
+        assert len(code_props) >= 1
+        assert code_props[0].proposed_change["confidence"] == 0.60
+
+
+@pytest.mark.asyncio
+async def test_pipeline_evolution_handler_no_code_proposal_single_failure(tmp_path, monkeypatch):
+    """A single pipeline failure should NOT generate a code-level proposal (needs 2+ failures)."""
+    from research_agent.core.db import init_db
+    from research_agent.research.services import pipeline_evolution
+    from research_agent.research.artifacts import ArtifactStore
+    from research_agent.core.models.db import PipelineRun
+    from research_agent.core import db as db_module
+    from datetime import datetime, timezone
+
+    await init_db()
+
+    async with db_module.AsyncSessionLocal() as db:
+        run = PipelineRun(
+            id="single-fail", user_id=1, run_id="single-fail-run",
+            pipeline_id="nf-core/rnaseq", revision="3.26.0", profile="docker",
+            status="failed",
+            parameters={"max_memory": "4.Gb"},
+            error="Executor: java.lang.OutOfMemoryError",
+            created_at=datetime(2026, 8, 14, 10, 0, 0).replace(tzinfo=timezone.utc).replace(tzinfo=None),
+        )
+        db.add(run)
+        await db.commit()
+
+    result = await pipeline_evolution({
+        "run_id": "single-fail-run",
+        "user_id": 1,
+        "artifact_store": ArtifactStore(tmp_path / "artifacts"),
+    })
+    assert result.status == "completed"
+    # OOM signal should still be generated, but no code-level proposal
+    assert any("内存" in s or "OOM" in s for s in result.output["signals"])
+    assert result.output.get("code_proposal_ids") is None or len(result.output["code_proposal_ids"]) == 0
+
+    # No code-level proposal should be in DB
+    async with db_module.AsyncSessionLocal() as db:
+        from sqlalchemy import select
+        from research_agent.core.models.db import LearningProposal
+        prop_result = await db.execute(
+            select(LearningProposal).where(LearningProposal.source_run_id == "single-fail-run")
+        )
+        proposals = prop_result.scalars().all()
+        code_props = [p for p in proposals if (p.proposed_change or {}).get("proposal_type") == "pipeline_code_improvement"]
+        assert len(code_props) == 0
+
+
+
 
 
 

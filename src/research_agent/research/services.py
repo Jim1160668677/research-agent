@@ -1100,7 +1100,109 @@ async def pipeline_evolution(payload: dict[str, Any]) -> CapabilityResult:
             from loguru import logger
             logger.warning(f"pipeline_evolution LLM analysis failed, using rule signals: {_llm_err}")
 
-    # 6. Build result
+    # 6. Code-level evolution: generate pipeline code improvement proposals on repeated failure
+    code_proposal_ids = []
+    if current_run and current_run.status == "failed" and current_run.error:
+        failed_count = sum(1 for r in historical_runs if r.status == "failed")
+        if failed_count >= 2:
+            try:
+                key_mgr = get_key_manager(None, user_id=user_id)
+                provider_name = "deepseek"
+                api_key = await key_mgr.get_key(provider_name)
+                if not api_key:
+                    api_key = getattr(settings, f"{provider_name}_api_key", "")
+                model = getattr(settings, f"{provider_name}_model", "deepseek-chat")
+                if api_key:
+                    provider = get_provider(provider_name, api_key=api_key, model=model)
+                    failed_errors = [r.error for r in historical_runs if r.status == "failed" and r.error]
+                    error_summary = "; ".join(str(e)[:300] for e in failed_errors[:3])
+                    prompt = (
+                        f"You are a bioinformatics pipeline expert. The Nextflow pipeline '{current_run.pipeline_id}@{current_run.revision}' has failed {failed_count} times with errors:\n{error_summary}\n\n"
+                        f"Suggest a concrete code-level improvement. Respond in JSON only:\n"
+                        '{"suggested_diff": "<diff or description>", '
+                        '"change_description": "<Chinese description>", '
+                        '"confidence": <0.0-1.0>, '
+                        '"target_file": "<file path>"}'
+                    )
+                    response = await provider.chat([LLMMessage(role="user", content=prompt)])
+                    llm_text = response.content.strip() if response.content else ""
+                    if llm_text:
+                        import json as _json
+                        import re as _re2
+                        try:
+                            json_match = _re2.search(r"\{[^}]+\}", llm_text)
+                            parsed = _json.loads(json_match.group()) if json_match else _json.loads(llm_text)
+                            diff_text = parsed.get("suggested_diff", "")
+                            desc_text = parsed.get("change_description", "")
+                            confidence_val = min(max(float(parsed.get("confidence", 0.7)), 0.0), 1.0)
+                            target_file = parsed.get("target_file", "")
+                        except (_json.JSONDecodeError, ValueError):
+                            diff_text = ""
+                            desc_text = ""
+                            confidence_val = 0.60
+                            target_file = ""
+                        title = f"流水线代码改进: {current_run.pipeline_id} (重复失败 {failed_count} 次)"
+                        rationale = f"流水线 {current_run.pipeline_id}@{current_run.revision} 已失败 {failed_count} 次。\n{desc_text}" if desc_text else f"流水线 {current_run.pipeline_id}@{current_run.revision} 已失败 {failed_count} 次，建议代码级优化。"
+                        proposed_change = {
+                            "proposal_type": "pipeline_code_improvement",
+                            "pipeline_id": current_run.pipeline_id,
+                            "revision": current_run.revision,
+                            "target_file": target_file,
+                            "suggested_diff": diff_text[:2000],
+                            "change_description": desc_text[:1000],
+                            "confidence": confidence_val,
+                        }
+                        prop_id = str(_uuid.uuid4())
+                        prop = LearningProposal(
+                            id=prop_id,
+                            user_id=user_id,
+                            source_run_id=run_id,
+                            title=title,
+                            rationale=rationale,
+                            proposed_change=proposed_change,
+                            evidence=[{"type": "repeated_failure", "pipeline_id": current_run.pipeline_id, "failure_count": failed_count, "errors": [str(e)[:300] for e in failed_errors[:3]]}],
+                            status="pending",
+                        )
+                        async with db_module.AsyncSessionLocal() as db2:
+                            db2.add(prop)
+                            await db2.commit()
+                        code_proposal_ids.append(prop_id)
+                        signals.append(f"代码进化提案: {desc_text[:120]}" if desc_text else f"代码进化提案: 流水线 {current_run.pipeline_id} 需要代码级优化 (置信度={confidence_val:.2f})")
+            except Exception as _code_err:
+                from loguru import logger
+                logger.warning(f"pipeline_evolution code-level proposal failed: {_code_err}")
+                # Fallback: generate a rule-based proposal when LLM is unavailable
+                if current_run and current_run.status == "failed" and current_run.error:
+                    failed_errors = [r.error for r in historical_runs if r.status == "failed" and r.error]
+                    error_summary = "; ".join(str(e)[:300] for e in failed_errors[:3])
+                    proposed_change = {
+                        "proposal_type": "pipeline_code_improvement",
+                        "pipeline_id": current_run.pipeline_id,
+                        "revision": current_run.revision,
+                        "target_file": "",
+                        "suggested_diff": f"Investigate repeated failure: {error_summary[:500]}",
+                        "change_description": f"Pipeline {current_run.pipeline_id}@{current_run.revision} failed {failed_count} times. Manual code review recommended.",
+                        "confidence": 0.60,
+                    }
+                    prop_id = str(_uuid.uuid4())
+                    prop = LearningProposal(
+                        id=prop_id,
+                        user_id=user_id,
+                        source_run_id=run_id,
+                        title=f"流水线代码改进 (规则回退): {current_run.pipeline_id} (重复失败 {failed_count} 次)",
+                        rationale=f"流水线 {current_run.pipeline_id}@{current_run.revision} 已失败 {failed_count} 次，LLM不可用，生成规则级建议。",
+                        proposed_change=proposed_change,
+                        evidence=[{"type": "repeated_failure", "pipeline_id": current_run.pipeline_id, "failure_count": failed_count, "errors": [str(e)[:300] for e in failed_errors[:3]]}],
+                        status="pending",
+                    )
+                    async with db_module.AsyncSessionLocal() as db2:
+                        db2.add(prop)
+                        await db2.commit()
+                    code_proposal_ids.append(prop_id)
+                    signals.append(f"代码进化提案: 流水线 {current_run.pipeline_id} 需要代码级优化 (置信度 0.60, 规则回退)")
+
+    # 7. Build result
+
     if not signals and not proposal_ids:
         return CapabilityResult(
             status="completed",
@@ -1115,17 +1217,21 @@ async def pipeline_evolution(payload: dict[str, Any]) -> CapabilityResult:
         )
 
     output = {
-        "proposal_ids": proposal_ids,
+        "proposal_ids": proposal_ids + code_proposal_ids,
         "signals": signals,
         "actions": actions,
         "adaptive_summary": adaptive_summary,
     }
     if llm_root_cause:
         output["llm_root_cause"] = llm_root_cause
+    if code_proposal_ids:
+        output["code_proposal_ids"] = code_proposal_ids
 
     confidence = 0.80
     if proposal_ids:
         confidence = max(confidence, 0.85)
+    if code_proposal_ids:
+        confidence = max(confidence, 0.82)
     if adaptive_summary:
         confidence = max(confidence, 0.80)
     if signals and proposal_ids:

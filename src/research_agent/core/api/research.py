@@ -688,6 +688,18 @@ async def decide_learning_proposal(
             entry[pc["parameter"]] = pc["recommended_value"]
             defaults[pid] = entry
             preferences["pipeline_defaults"] = defaults
+        # Wire up pipeline_code_improvement proposals: store diff context for future reference
+        if pc.get("proposal_type") == "pipeline_code_improvement":
+            code_notes = list(preferences.get("pipeline_code_notes") or [])
+            code_notes.append({
+                "proposal_id": proposal.id,
+                "pipeline_id": pc.get("pipeline_id", ""),
+                "revision": pc.get("revision", ""),
+                "target_file": pc.get("target_file", ""),
+                "change_description": pc.get("change_description", "")[:500],
+                "confidence": pc.get("confidence", 0.0),
+            })
+            preferences["pipeline_code_notes"] = code_notes[-10:]
         profile.skill_preferences = preferences
     await db.commit()
     return {"id": proposal.id, "status": proposal.status, "behavior_changed": request.decision == "applied"}
