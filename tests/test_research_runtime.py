@@ -1,4 +1,4 @@
-﻿"""科研任务运行时、证据契约与工作台 API 测试。"""
+"""科研任务运行时、证据契约与工作台 API 测试。"""
 
 
 import asyncio
@@ -131,12 +131,13 @@ def test_planner_adds_pipeline_execution_step():
     value = plan.to_dict()
     assert ResearchPlanner.validate_plan(value) == []
     keys = [step["key"] for step in value["steps"]]
-    assert keys == ["intake", "data", "pipeline", "writing", "integrity"]
+    assert keys == ["intake", "data", "pipeline", "pipeline_evolution", "writing", "integrity"]
     pipeline_step = next(step for step in value["steps"] if step["key"] == "pipeline")
     assert pipeline_step["capability"] == "pipeline_execution"
     assert pipeline_step["dependencies"] == ["intake"]
     writing_step = next(step for step in value["steps"] if step["key"] == "writing")
     assert "pipeline" in writing_step["dependencies"]
+    assert "pipeline_evolution" in writing_step["dependencies"]
     assert "pipeline" in value["review_gates"]
     assert "pipeline_execution" in value["policy"]["allowed_capabilities"]
 
@@ -147,6 +148,207 @@ def test_planner_ignores_pipeline_without_pipeline_id():
         context={"pipeline": {"profile": "docker"}},
     )
     assert all(step.capability != "pipeline_execution" for step in plan.steps)
+
+
+@pytest.mark.asyncio
+async def test_pipeline_evolution_handler_generates_proposals_on_low_feedback(
+    tmp_path, monkeypatch
+):
+    """When feedback ratings are low, pipeline_evolution creates a LearningProposal."""
+    from research_agent.core.db import init_db
+    from research_agent.research.services import pipeline_evolution
+    from research_agent.research.artifacts import ArtifactStore
+    from sqlalchemy import select
+    from research_agent.core.models.db import AgentFeedback, LearningProposal
+
+    await init_db()
+
+    # Insert a low-rating feedback record
+    from research_agent.core import db as db_module
+    async with db_module.AsyncSessionLocal() as db:
+        fb = AgentFeedback(
+            user_id=1,
+            run_id="research-run-evo-1",
+            rating=1,
+            accepted=False,
+            correction="建议将 timeout 从 3600 改为 7200",
+            tags=["pipeline_param"],
+            created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        )
+        db.add(fb)
+        await db.commit()
+
+    result = await pipeline_evolution({
+        "run_id": "research-run-evo-1",
+        "user_id": 1,
+        "artifact_store": ArtifactStore(tmp_path / "artifacts"),
+    })
+    assert result.status == "completed"
+    assert len(result.output["proposal_ids"]) >= 1
+    assert any("低分" in s or "参数" in s for s in result.output["signals"])
+
+    # Verify proposal was written to DB
+    async with db_module.AsyncSessionLocal() as db:
+        prop_result = await db.execute(
+            select(LearningProposal).where(LearningProposal.source_run_id == "research-run-evo-1")
+        )
+        proposals = prop_result.scalars().all()
+        assert len(proposals) >= 1
+        assert proposals[0].status == "pending"
+        assert proposals[0].proposed_change.get("proposal_type") == "pipeline_param"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_evolution_handler_no_signals(tmp_path, monkeypatch):
+    """When there are no low ratings or failed runs, returns empty signals."""
+    from research_agent.core.db import init_db
+    from research_agent.research.services import pipeline_evolution
+    from research_agent.research.artifacts import ArtifactStore
+
+    await init_db()
+
+    result = await pipeline_evolution({
+        "run_id": "research-run-evo-noop",
+        "user_id": 1,
+        "artifact_store": ArtifactStore(tmp_path / "artifacts"),
+    })
+    assert result.status == "completed"
+    assert "暂无需要进化的信号" in result.output["message"]
+    assert result.confidence >= 0.8
+
+
+@pytest.mark.asyncio
+async def test_pipeline_evolution_handler_adaptive_optimization(tmp_path, monkeypatch):
+    """When historical runs exist with parameter patterns, generates adaptive suggestions."""
+    from research_agent.core.db import init_db
+    from research_agent.research.services import pipeline_evolution
+    from research_agent.research.artifacts import ArtifactStore
+    from research_agent.core.models.db import PipelineRun
+    from research_agent.core import db as db_module
+    from datetime import datetime, timezone
+
+    await init_db()
+
+    async with db_module.AsyncSessionLocal() as db:
+        runs = [
+            PipelineRun(
+                id="hist-run-a", user_id=1, run_id="hist-research-a",
+                pipeline_id="nf-core/rnaseq", revision="3.26.0", profile="docker",
+                status="completed",
+                parameters={"max_cpus": 4, "test_profile": True},
+                created_at=datetime(2026, 8, 10, 10, 0, 0).replace(tzinfo=timezone.utc).replace(tzinfo=None),
+            ),
+            PipelineRun(
+                id="hist-run-b", user_id=1, run_id="hist-research-b",
+                pipeline_id="nf-core/rnaseq", revision="3.26.0", profile="docker",
+                status="completed",
+                parameters={"max_cpus": 4, "test_profile": True},
+                created_at=datetime(2026, 8, 11, 10, 0, 0).replace(tzinfo=timezone.utc).replace(tzinfo=None),
+            ),
+            PipelineRun(
+                id="hist-run-c", user_id=1, run_id="hist-research-c",
+                pipeline_id="nf-core/rnaseq", revision="3.26.0", profile="docker",
+                status="failed",
+                parameters={"max_cpus": 1, "test_profile": True},
+                error="Executor: java.lang.OutOfMemoryError: Java heap space (killed)",
+                created_at=datetime(2026, 8, 12, 10, 0, 0).replace(tzinfo=timezone.utc).replace(tzinfo=None),
+            ),
+        ]
+        for r in runs:
+            db.add(r)
+        await db.commit()
+
+    result = await pipeline_evolution({
+        "run_id": "hist-research-c",
+        "user_id": 1,
+        "artifact_store": ArtifactStore(tmp_path / "artifacts"),
+    })
+    assert result.status == "completed"
+    assert any("历史分析" in s for s in result.output["signals"])
+    assert result.output.get("adaptive_summary") is not None
+    summary = result.output["adaptive_summary"]
+    assert summary["historical_runs"] == 3
+    assert len(summary["suggestions"]) >= 1
+    assert any(s["parameter"] == "max_cpus" for s in summary["suggestions"])
+    cpus_sug = [s for s in summary["suggestions"] if s["parameter"] == "max_cpus"]
+    assert cpus_sug
+    assert cpus_sug[0]["recommended_value"] == "4"
+    assert cpus_sug[0]["confidence"] >= 0.7
+    assert any("内存" in s or "OOM" in s for s in result.output["signals"])
+    assert result.confidence == 0.80
+
+
+@pytest.mark.asyncio
+async def test_pipeline_evolution_handler_oom_pattern_detection(tmp_path, monkeypatch):
+    """OOM errors in failed runs trigger increase_memory proposal."""
+    from research_agent.core.db import init_db
+    from research_agent.research.services import pipeline_evolution
+    from research_agent.research.artifacts import ArtifactStore
+    from research_agent.core.models.db import PipelineRun
+    from research_agent.core import db as db_module
+    from datetime import datetime, timezone
+
+    await init_db()
+
+    async with db_module.AsyncSessionLocal() as db:
+        run = PipelineRun(
+            id="oom-run", user_id=1, run_id="oom-research",
+            pipeline_id="nf-core/rnaseq", revision="3.26.0", profile="docker",
+            status="failed",
+            parameters={"max_memory": "4.Gb"},
+            error="Executor: java.lang.OutOfMemoryError: Java heap space (killed)",
+            created_at=datetime(2026, 8, 14, 10, 0, 0).replace(tzinfo=timezone.utc).replace(tzinfo=None),
+        )
+        db.add(run)
+        await db.commit()
+
+    result = await pipeline_evolution({
+        "run_id": "oom-research",
+        "user_id": 1,
+        "artifact_store": ArtifactStore(tmp_path / "artifacts"),
+    })
+    assert result.status == "completed"
+    actions = result.output["actions"]
+    assert "investigate_failure" in actions
+    assert any("内存" in s for s in result.output["signals"])
+
+
+@pytest.mark.asyncio
+async def test_pipeline_evolution_handler_timeout_pattern_detection(tmp_path, monkeypatch):
+    """Timeout errors in failed runs trigger increase_timeout proposal."""
+    from research_agent.core.db import init_db
+    from research_agent.research.services import pipeline_evolution
+    from research_agent.research.artifacts import ArtifactStore
+    from research_agent.core.models.db import PipelineRun
+    from research_agent.core import db as db_module
+    from datetime import datetime, timezone
+
+    await init_db()
+
+    async with db_module.AsyncSessionLocal() as db:
+        run = PipelineRun(
+            id="timeout-run", user_id=1, run_id="timeout-research",
+            pipeline_id="nf-core/rnaseq", revision="3.26.0", profile="docker",
+            status="failed",
+            parameters={},
+            error="Timed out: process exceeded 3600s limit",
+            created_at=datetime(2026, 8, 14, 12, 0, 0).replace(tzinfo=timezone.utc).replace(tzinfo=None),
+        )
+        db.add(run)
+        await db.commit()
+
+    result = await pipeline_evolution({
+        "run_id": "timeout-research",
+        "user_id": 1,
+        "artifact_store": ArtifactStore(tmp_path / "artifacts"),
+    })
+    assert result.status == "completed"
+    actions = result.output["actions"]
+    assert "investigate_failure" in actions
+    assert any("超时" in s for s in result.output["signals"])
+
+
+
 
 
 class _FakePipelineBackend:
