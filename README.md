@@ -27,6 +27,25 @@ The desktop build is a native WebView2 window backed by one embedded FastAPI/Uvi
 
 External model calls require the corresponding API key. NCBI features require network access. Docking and structure operations require their separately licensed or installed command-line applications. Production nf-core execution on Windows requires an operational WSL2 distribution with a compatible Nextflow release and selected runtime inside WSL2.
 
+## Performance & Verification Baseline
+
+| Metric | Value | Source |
+|---|---:|---|
+| Python test suite | **291 passed / 0 failed** (261.77s) | [test_report.md](docs/test_report.md) |
+| RA-Eval v1 smoke tests | 18 cases (command whitelist, regex assertions, shell injection rejection) | [test_plugins_smoke.py](tests/test_plugins_smoke.py) |
+| nf-core/rnaseq 真实运行 | **3 次全绿：234 任务 / 0 失败**；峰值 4 CPU / 7 GB / 1 槽；967 结果文件，全部 SHA-256 记录 | frozen-smoke-result.json |
+| nf-core/sarek | 已注册 revision 3.9.0 + commit SHA 校验，samplesheet 契约验证通过 | nextflow.py PIPELINES |
+| 规划延迟 | 0.027–0.031 ms/次 | P2/P4 报告 |
+| 证据归一化 | 3.06–3.27 ms/200 条 | P2/P4 报告 |
+| CSV 剖析 | 0.61–1.50 s/50,000 行 | P2/P4 报告 |
+| Agnes 真实调用 | 4,508–4,716 ms，一次成功，308 tokens | P4 报告 |
+| AES-256-GCM 安全黑盒 | 密文篡改 HTTP 409、重启解密成功、审计链有效 | P3/恢复验收报告 |
+| 发布物构建 | EXE 39.6 MB；onedir 1,388 文件 / 593 MB；构建 585s | P0 验收报告 |
+| 源码规模 | 87 Python 文件 / ~19,789 行 + 测试 17 文件 / ~4,434 行 + 前端 2,711 行 | 本次统计 |
+| 科研能力 | 12 能力 / 18 技能 / 25 工具 / 42 版本 / 9 分类 | contracts.py、seed.py、数据库 |
+
+**与竞品对比关键数据**：本项目是唯一通过固定版本 commit SHA 校验的 Windows 原生 nf-core 执行工具，所有 pipeline 产物（报告、trace、MultiQC）均附带 SHA-256 摘要并纳入审计链，与 PantheonOS 的社区模式不同，本系统不依赖外部云端服务即可完成端到端分析。
+
 ## Run the built desktop application
 
 The verified onedir build is:
@@ -104,6 +123,8 @@ Add `-CreateInstaller` when Inno Setup's `ISCC.exe` is installed. The build is d
 - [LLM setup](docs/llm_setup.md)
 - [Plugin market](docs/plugin_market.md)
 - [Competitive evaluation (PantheonOS / Biomni)](docs/evaluation.md)
+- [Full functional evaluation (2026-08-14)](docs/full_functional_evaluation_20260814.md)
+- [P0 completion report (2026-08-16)](docs/p0_completion_report_20260816.md)
 - [Docking integration](docs/docking_integration.md)
 - [Multi-agent design](docs/multi_agent.md)
 - [Test report](docs/test_report.md)
@@ -123,6 +144,7 @@ src/research_agent/
   execution/        external backend contract, WSL2 Nextflow/nf-core execution and recovery
   plugins/          manifests, lifecycle, trusted catalogs, platform probes, dependencies, isolated deployment
   ncbi_skills/      NCBI integration
+  reporting/        Markdown/HTML/PDF research brief generation
   desktop_app.py    native single-process desktop lifecycle
 frontend/           Vue 3 desktop interface
 tests/              unit, API, security, isolation, and lifecycle tests

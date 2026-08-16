@@ -19,7 +19,7 @@ from ...execution.manager import RESUMABLE_STATUSES, TERMINAL_STATUSES, get_pipe
 from ...execution.nextflow import PIPELINES, pipeline_catalog, validate_request
 from ..auth import get_current_user, require_role
 from ..db import get_db
-from ..models.db import PipelineRun, ResearchArtifact
+from ..models.db import PipelineRun, ResearchArtifact, UserProfile
 
 router = APIRouter()
 
@@ -192,6 +192,13 @@ async def create_run(
 ):
     if request.execute and current_user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Starting external computation requires the admin role")
+    # Merge stored adaptive pipeline defaults into request parameters
+    _up_result = await db.execute(select(UserProfile).where(UserProfile.user_id == current_user["user_id"]))
+    _up = _up_result.scalars().first()
+    _defaults = (dict((_up.skill_preferences or {}).get("pipeline_defaults") or {})).get(request.pipeline_id, {}) if _up else {}
+    if _defaults:
+        merged = {**_defaults, **request.parameters}
+        request.parameters = merged
     normalized = _validate_request(request)
     user_id = current_user["user_id"]
     await _validate_artifacts(db, user_id, request.pipeline_id, request.artifact_bindings)

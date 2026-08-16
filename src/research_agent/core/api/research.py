@@ -679,6 +679,15 @@ async def decide_learning_proposal(
             "domains": (proposal.proposed_change or {}).get("domains", []),
         })
         preferences["research_planning_notes"] = notes[-20:]
+        # Wire up pipeline_param proposals: store adaptive defaults in profile
+        pc = proposal.proposed_change or {}
+        if pc.get("parameter") and pc.get("recommended_value") is not None:
+            defaults = dict(preferences.get("pipeline_defaults") or {})
+            pid = pc.get("pipeline_id", "")
+            entry = defaults.get(pid) or {}
+            entry[pc["parameter"]] = pc["recommended_value"]
+            defaults[pid] = entry
+            preferences["pipeline_defaults"] = defaults
         profile.skill_preferences = preferences
     await db.commit()
     return {"id": proposal.id, "status": proposal.status, "behavior_changed": request.decision == "applied"}

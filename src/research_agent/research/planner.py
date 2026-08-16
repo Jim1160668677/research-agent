@@ -175,11 +175,26 @@ class ResearchPlanner:
                 )
             )
 
+        # pipeline_evolution: non-blocking proposal step after pipeline execution
+        if isinstance(pipeline_request, dict) and pipeline_request.get("pipeline_id"):
+            steps.append(
+                PlanStep(
+                    key="pipeline_evolution",
+                    title=CAPABILITIES["pipeline_evolution"].title,
+                    capability="pipeline_evolution",
+                    dependencies=["pipeline"],
+                    input_data={
+                        "run_id": context.get("run_id", ""),
+                        "user_id": context.get("user_id", 0),
+                    },
+                )
+            )
+
         if "writing" in selected:
             dependencies = [
                 step.key
                 for step in steps
-                if step.key in {"literature", "meta_review", "experiment", "data", "pipeline"}
+                if step.key in {"literature", "meta_review", "experiment", "data", "pipeline", "pipeline_evolution"}
             ]
             steps.append(
                 PlanStep(

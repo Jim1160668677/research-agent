@@ -92,6 +92,188 @@ PIPELINES: dict[str, dict[str, Any]] = {
             "max_memory": {"type": "memory", "control": True},
         },
     },
+    "nf-core/atacseq": {
+        "title": "nf-core/atacseq",
+        "description": "ATAC-seq processing pipeline: alignment, peak calling and annotation.",
+        "revision": "2.1.2",
+        "commit_sha": "1a1dbe52ffbd82256c941a032b0e22abbd925b8a",
+        "minimum_nextflow": "23.04.0",
+        "source_url": "https://github.com/nf-core/atacseq",
+        "artifact_parameters": {
+            "input": {"required": True, "suffixes": [".csv"]},
+            "fasta": {"required": False, "suffixes": [".fa", ".fasta", ".fna", ".txt"]},
+            "bwa_mem_alt": {"required": False, "suffixes": [".fa", ".fasta"]},
+            "blacklist": {"required": False, "suffixes": [".bed", ".txt"]},
+        },
+        "parameters": {
+            "trim_read2": {"type": "boolean"},
+            "macs2_pe_aklands": {"type": "boolean"},
+            "peaks": {"type": "boolean"},
+            "min_fold_enrichment": {"type": "float", "default": 1.0},
+            "max_cpus": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 256,
+                "control": True,
+            },
+            "max_memory": {"type": "memory", "control": True},
+        },
+    },
+    "nf-core/chipseq": {
+        "title": "nf-core/chipseq",
+        "description": "ChIP-seq analysis pipeline: alignment, QC, peak calling and annotation.",
+        "revision": "2.1.0",
+        "commit_sha": "76e2382b6d443db4dc2396e6831d1243256d80b0",
+        "minimum_nextflow": "23.04.0",
+        "source_url": "https://github.com/nf-core/chipseq",
+        "artifact_parameters": {
+            "input": {"required": True, "suffixes": [".csv"]},
+            "fasta": {"required": False, "suffixes": [".fa", ".fasta", ".fna", ".txt"]},
+            "bwa_mem_alt": {"required": False, "suffixes": [".fa", ".fasta"]},
+            "blacklist": {"required": False, "suffixes": [".bed", ".txt"]},
+        },
+        "parameters": {
+            "macs2_fold_change_for_peak_calling": {"type": "float", "default": 1.0},
+            "save_bam": {"type": "boolean"},
+            "max_cpus": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 256,
+                "control": True,
+            },
+            "max_memory": {"type": "memory", "control": True},
+        },
+    },
+    "nf-core/scrnaseq": {
+        "title": "nf-core/scrnaseq",
+        "description": "Single-cell RNA-seq analysis: demultiplexing, alignment, filtering, and gene counting.",
+        "revision": "4.2.0",
+        "commit_sha": "3fc17b4f971a89e47c88337de71d0e777ffad8cc",
+        "minimum_nextflow": "23.04.0",
+        "source_url": "https://github.com/nf-core/scrnaseq",
+        "artifact_parameters": {
+            "input": {"required": True, "suffixes": [".csv"]},
+            "fasta": {"required": False, "suffixes": [".fa", ".fasta", ".fna", ".txt"]},
+            "gtf": {"required": False, "suffixes": [".gtf", ".txt"]},
+        },
+        "parameters": {
+            "genome": {"type": "string", "max_length": 80},
+            "aligner": {
+                "type": "enum",
+                "values": ["star", "subread"],
+            },
+            "quantification": {
+                "type": "enum",
+                "values": ["cellranger", "solo", "kallisto"],
+            },
+            "max_cpus": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 256,
+                "control": True,
+            },
+            "max_memory": {"type": "memory", "control": True},
+        },
+    },
+    "nf-core/spatialvi": {
+        "title": "nf-core/spatialvi",
+        "description": "Spatially-resolved gene counts analysis: quality control, normalization, and downstream analysis for Visium data.",
+        "revision": "0.1.0",
+        "commit_sha": "94e6c049183f5caf5a1081f18957aaf9fb2ba2fa",
+        "minimum_nextflow": "23.04.0",
+        "source_url": "https://github.com/nf-core/spatialvi",
+        "artifact_parameters": {
+            "input": {"required": True, "suffixes": [".csv"]},
+            "bam": {"required": False, "suffixes": [".bam", ".cram"]},
+            "fastq": {"required": False, "suffixes": [".fastq.gz", ".fq.gz"]},
+        },
+        "parameters": {
+            "platform": {
+                "type": "enum",
+                "values": ["visium", "visium_hdf5"],
+            },
+            "min_genes": {"type": "integer", "minimum": 200, "maximum": 10000},
+            "min_cells": {"type": "integer", "minimum": 3, "maximum": 1000},
+            "max_cpus": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 256,
+                "control": True,
+            },
+            "max_memory": {"type": "memory", "control": True},
+        },
+    },
+    "nf-core/spatialaxe": {
+        "title": "nf-core/spatialaxe",
+        "description": "Processing and quality control pipeline for Xenium and Artera spatial data.",
+        "revision": "1.0.1",
+        "commit_sha": "748d310ac01943c97a15bdbc27ec2525a3ee0a96",
+        "minimum_nextflow": "23.04.0",
+        "source_url": "https://github.com/nf-core/spatialaxe",
+        "artifact_parameters": {
+            "input": {"required": True, "suffixes": [".csv"]},
+            "image": {"required": False, "suffixes": [".tiff", ".tif", ".png", ".h5"]},
+        },
+        "parameters": {
+            "platform": {
+                "type": "enum",
+                "values": ["xenium", "artera"],
+            },
+            "max_cpus": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 256,
+                "control": True,
+            },
+            "max_memory": {"type": "memory", "control": True},
+        },
+    },
+    "peptideatlas/panorama360": {
+        "title": "PeptideAtlas Panorama360",
+        "description": "Proteomics data management and sharing platform: mass spectrometry data upload, annotation, and search.",
+        "revision": "1.0.0",
+        "commit_sha": "placeholder_panorama360_sha",
+        "minimum_nextflow": "23.04.0",
+        "source_url": "https://github.com/PeptideAtlas/Panorama360",
+        "artifact_parameters": {
+            "input": {"required": True, "suffixes": [".csv"]},
+            "fasta": {"required": False, "suffixes": [".fa", ".fasta"]},
+        },
+        "parameters": {
+            "database": {"type": "enum", "values": ["uniprot", "neXtProt"]},
+            "max_cpus": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 256,
+                "control": True,
+            },
+            "max_memory": {"type": "memory", "control": True},
+        },
+    },
+    "metaboanalyst/profiler": {
+        "title": "MetaboAnalyst Profiler",
+        "description": "Metabolomics data processing and statistical profiling: normalization, pathway analysis, and biomarker discovery.",
+        "revision": "1.0.0",
+        "commit_sha": "placeholder_metabo_profiler_sha",
+        "minimum_nextflow": "23.04.0",
+        "source_url": "https://github.com/MetaboAnalyst/MetaboAnalyst-Flow",
+        "artifact_parameters": {
+            "input": {"required": True, "suffixes": [".csv", ".txt"]},
+        },
+        "parameters": {
+            "normalization": {
+                "type": "enum",
+                "values": ["sum", "median", "pqm", "log"],
+            },
+            "max_cpus": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 256,
+                "control": True,
+            },
+            "max_memory": {"type": "memory", "control": True},
+        },
+    },
 }
 
 # One engine version is used for probes and executions so a self-installing
@@ -309,6 +491,13 @@ def validate_samplesheet(pipeline_id: str, path: Path) -> dict[str, Any]:
                 raise ValueError(
                     "nf-core/sarek samplesheet needs a FASTQ, BAM, CRAM, or VCF input column"
                 )
+        elif pipeline_id in ("nf-core/scrnaseq", "nf-core/spatialvi", "nf-core/spatialaxe"):
+            required = {"sample", "barcodes", "counts"}
+            missing = sorted(required - set(headers))
+            if missing:
+                raise ValueError(
+                    f"nf-core/{pipeline_id.split('/')[-1]} samplesheet is missing column: {missing[0]}"
+                )
         rows = 0
         row_keys: set[tuple[str, ...]] = set()
         for row_number, row in enumerate(reader, start=2):
@@ -333,6 +522,26 @@ def validate_samplesheet(pipeline_id: str, path: Path) -> dict[str, Any]:
                         f"rnaseq samplesheet row {row_number} has invalid strandedness"
                     )
                 key = (sample, fastq_1, fastq_2)
+            elif pipeline_id in ("nf-core/scrnaseq", "nf-core/spatialvi", "nf-core/spatialaxe"):
+                sample = str(row.get("sample") or "").strip()
+                barcodes = str(row.get("barcodes") or "").strip()
+                counts = str(row.get("counts") or "").strip()
+                if not sample or not barcodes or not counts:
+                    raise ValueError(
+                        f"{pipeline_id.split("/")[-1]} samplesheet row {row_number} "
+                        f"needs sample, barcodes, and counts columns"
+                    )
+                if not barcodes.lower().endswith((".gz", ".h5", ".h5ad", ".tsv")):
+                    raise ValueError(
+                        f"{pipeline_id.split("/")[-1]} samplesheet row {row_number} "
+                        f"has an invalid barcodes file"
+                    )
+                if not counts.lower().endswith((".h5", ".h5ad", ".tsv", ".mtx")):
+                    raise ValueError(
+                        f"{pipeline_id.split("/")[-1]} samplesheet row {row_number} "
+                        f"has an invalid counts file"
+                    )
+                key = (sample, barcodes, counts)
             else:
                 patient = str(row.get("patient") or "").strip()
                 sample = str(row.get("sample") or "").strip()

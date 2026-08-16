@@ -218,6 +218,19 @@ CAPABILITIES: dict[str, CapabilitySpec] = {
         timeout_seconds=25,
         cost_units=2,
     ),
+    "pipeline_evolution": CapabilitySpec(
+        name="pipeline_evolution",
+        title="流水线参数进化提案",
+        description=(
+            "基于历史运行结果与用户反馈，生成参数优化或流程改进提案，"
+            "提交待人工审核后作为下一次运行的输入基准。"
+        ),
+        category="analysis",
+        writes_artifacts=False,
+        requires_human_review=True,
+        timeout_seconds=30,
+        cost_units=1,
+    ),
 }
 
 
