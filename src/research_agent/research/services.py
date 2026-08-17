@@ -959,15 +959,17 @@ async def pipeline_evolution(payload: dict[str, Any]) -> CapabilityResult:
 
         await db.commit()
 
-    # 2. Query current and historical runs
+    # 2. Query current and historical runs (cross-pipeline aggregation)
     current_run = None
     historical_runs = []
+    cross_pipeline_runs = []
 
     async with db_module.AsyncSessionLocal() as db:
         result = await db.execute(select(PipelineRun).where(PipelineRun.run_id == run_id))
         current_run = result.scalar_one_or_none()
 
         if current_run:
+            # Same-pipeline historical runs (existing behavior)
             hist_result = await db.execute(
                 select(PipelineRun)
                 .where(PipelineRun.user_id == user_id)
@@ -976,6 +978,15 @@ async def pipeline_evolution(payload: dict[str, Any]) -> CapabilityResult:
                 .order_by(PipelineRun.created_at.asc())
             )
             historical_runs = list(hist_result.scalars().all())
+
+            # Cross-pipeline historical runs for the same user
+            cross_hist_result = await db.execute(
+                select(PipelineRun)
+                .where(PipelineRun.user_id == user_id)
+                .where(PipelineRun.run_id != run_id)
+                .order_by(PipelineRun.created_at.asc())
+            )
+            cross_pipeline_runs = list(cross_hist_result.scalars().all())
 
     # 3. Failure pattern detection
     if current_run and current_run.status == "failed" and current_run.error:
@@ -1076,6 +1087,44 @@ async def pipeline_evolution(payload: dict[str, Any]) -> CapabilityResult:
                 "completed": len(completed_runs),
                 "failed": 0,
                 "suggestions": suggestions,
+            }
+
+        # 4.5 Cross-pipeline signal aggregation
+    cross_pipeline_summary = None
+    if cross_pipeline_runs:
+        cross_completed = [r for r in cross_pipeline_runs if r.status == "completed"]
+        cross_failed = [r for r in cross_pipeline_runs if r.status == "failed"]
+        cross_pipeline_ids = set(r.pipeline_id for r in cross_pipeline_runs)
+
+        if len(cross_pipeline_ids) >= 2:
+            signals.append(f"跨流水线信号: {len(cross_pipeline_runs)} 次运行来自 {len(cross_pipeline_ids)} 个不同流水线")
+
+            # Aggregate parameter patterns across all pipelines
+            cross_param_values = {}
+            for r in cross_completed:
+                for k, v in (r.parameters or {}).items():
+                    cross_param_values.setdefault(k, []).append(v)
+
+            from collections import Counter as _CrossCounter
+            for param, values in cross_param_values.items():
+                freq = _CrossCounter(str(v) for v in values)
+                most_common_val, most_common_count = freq.most_common(1)[0]
+                if most_common_count >= 2:
+                    suggestions.append({
+                        "parameter": param,
+                        "recommended_value": most_common_val,
+                        "reason": f"跨流水线推荐: 在 {most_common_count} 次成功运行中出现 ({param})",
+                        "confidence": round(min(0.65 + 0.03 * most_common_count, 0.90), 2),
+                        "scope": "cross_pipeline",
+                    })
+
+            cross_pipeline_summary = {
+                "total_cross_runs": len(cross_pipeline_runs),
+                "unique_pipelines": len(cross_pipeline_ids),
+                "pipeline_ids": list(cross_pipeline_ids),
+                "completed": len(cross_completed),
+                "failed": len(cross_failed),
+                "cross_pipeline_suggestions_count": sum(1 for s in suggestions if s.get("scope") == "cross_pipeline"),
             }
 
     # 5. LLM root cause analysis (optional, non-blocking)
@@ -1221,6 +1270,7 @@ async def pipeline_evolution(payload: dict[str, Any]) -> CapabilityResult:
         "signals": signals,
         "actions": actions,
         "adaptive_summary": adaptive_summary,
+        "cross_pipeline_summary": cross_pipeline_summary,
     }
     if llm_root_cause:
         output["llm_root_cause"] = llm_root_cause
