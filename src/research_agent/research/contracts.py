@@ -231,6 +231,21 @@ CAPABILITIES: dict[str, CapabilitySpec] = {
         timeout_seconds=30,
         cost_units=1,
     ),
+    "multi_omics_fusion": CapabilitySpec(
+        name="multi_omics_fusion",
+        title="多组学智能融合分析",
+        description=(
+            "对 scRNA-seq 与空间转录组数据进行联合分析：统一基因空间、"
+            "标准化表达矩阵、细胞类型空间定位与微环境推断。"
+        ),
+        category="analysis",
+        modalities=("table", "text"),
+        risk=RiskLevel.HIGH,
+        writes_artifacts=True,
+        requires_human_review=True,
+        timeout_seconds=300,
+        cost_units=10,
+    ),
 }
 
 

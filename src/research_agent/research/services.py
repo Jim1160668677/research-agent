@@ -1294,6 +1294,213 @@ async def pipeline_evolution(payload: dict[str, Any]) -> CapabilityResult:
     )
 
 
+async def multi_omics_fusion(payload: dict[str, Any]) -> CapabilityResult:
+    """Joint scRNA-seq + spatial transcriptome fusion analysis.
+
+    Reads a scRNA-seq count matrix and a spatial expression matrix from the
+    artifact store, aligns them on the common gene space, normalises both to
+    log-normalised unit-variance scale, and produces a fused expression matrix
+    together with a brief joint-analysis report.
+    """
+    import csv
+    import math
+
+    store: ArtifactStore = payload["artifact_store"]
+    user_id = int(payload["user_id"])
+    run_id = str(payload["run_id"])
+    spec = dict(payload.get("fusion_spec") or {})
+
+    scrna_artifact = spec.get("scrna_artifact") or {}
+    spatial_artifact = spec.get("spatial_artifact") or {}
+    if not scrna_artifact or not spatial_artifact:
+        return CapabilityResult(
+            status="degraded",
+            output={
+                "message": "需要同时提供 scRNA-seq 计数矩阵和空间转录组表达矩阵。",
+                "required_inputs": ["scrna_artifact", "spatial_artifact"],
+            },
+            warnings=["缺少必要输入：scRNA-seq 或空间数据未指定。"],
+            confidence=0.0,
+        )
+
+    def _read_gene_matrix(artifact_spec: dict, label: str):
+        try:
+            with store.materialize({**artifact_spec, "user_id": user_id}) as path:
+                rows = []
+                with open(path, "r", encoding="utf-8", newline="") as f:
+                    reader = csv.reader(f)
+                    for row in reader:
+                        rows.append(row)
+        except Exception as exc:
+            raise ValueError(f"{label} 矩阵读取失败: {str(exc)[:200]}")
+
+        if len(rows) < 2:
+            raise ValueError(f"{label} 矩阵数据不足（少于2行）")
+
+        header = rows[0]
+        first_cell = header[0] if header else ""
+        if first_cell and not first_cell.replace(".", "").replace("-", "").isdigit():
+            gene_col = 0
+            value_cols = list(range(1, len(header)))
+        else:
+            gene_col = None
+            value_cols = list(range(len(header)))
+
+        gene_order = []
+        matrix = []
+        for row in rows[1:]:
+            if gene_col is not None:
+                gene_id = row[gene_col] if gene_col < len(row) else ""
+                values = [row[j] for j in value_cols] if value_cols else row
+            else:
+                gene_id = f"gene_{len(matrix)}"
+                values = row
+            try:
+                floats = [float(v) for v in values if v.strip() != ""]
+            except ValueError:
+                continue
+            if not floats:
+                continue
+            gene_order.append(gene_id)
+            matrix.append(floats)
+
+        n_genes = len(matrix)
+        n_features = len(matrix[0]) if matrix else 0
+        if n_genes == 0 or n_features == 0:
+            raise ValueError(f"{label} 矩阵解析后无有效数值行/列")
+        return gene_order, matrix, n_genes, n_features
+
+    try:
+        scrna_genes, scrna_matrix, scrna_n_genes, scrna_n_cells = _read_gene_matrix(
+            scrna_artifact, "scRNA-seq"
+        )
+        spatial_genes, spatial_matrix, spatial_n_genes, spatial_n_spots = _read_gene_matrix(
+            spatial_artifact, "spatial"
+        )
+    except ValueError as exc:
+        return CapabilityResult(
+            status="failed",
+            output={"message": str(exc)[:500]},
+            warnings=[str(exc)[:200]],
+            confidence=0.0,
+        )
+
+    scrna_gene_to_idx = {g: i for i, g in enumerate(scrna_genes)}
+    spatial_gene_to_idx = {g: i for i, g in enumerate(spatial_genes)}
+    common_genes = [g for g in scrna_genes if g in spatial_gene_to_idx]
+    if not common_genes:
+        return CapabilityResult(
+            status="failed",
+            output={
+                "message": "scRNA-seq 与空间数据之间没有共同的基因标识符，无法融合。",
+                "scrna_genes_found": len(scrna_genes),
+                "spatial_genes_found": len(spatial_genes),
+            },
+            warnings=["基因空间无交集，融合失败。"],
+            confidence=0.0,
+        )
+
+    scrna_common_idx = [scrna_gene_to_idx[g] for g in common_genes]
+    spatial_common_idx = [spatial_gene_to_idx[g] for g in common_genes]
+    # scrna_common_idx / spatial_common_idx are gene row positions in the original matrices.
+
+    def _log_norm(matrix_rows):
+        n = len(matrix_rows)
+        if n == 0:
+            return []
+        m = len(matrix_rows[0])
+        col_sums = [0.0] * m
+        for row in matrix_rows:
+            for j, v in enumerate(row):
+                col_sums[j] += math.log1p(max(v, 0.0))
+        col_means = [s / n for s in col_sums]
+        col_vars = [0.0] * m
+        for row in matrix_rows:
+            for j, v in enumerate(row):
+                d = math.log1p(max(v, 0.0)) - col_means[j]
+                col_vars[j] += d * d
+        col_stds = [math.sqrt(v / n) if v > 0 else 1.0 for v in col_vars]
+        result = []
+        for row in matrix_rows:
+            new_row = []
+            for j, v in enumerate(row):
+                normed = (math.log1p(max(v, 0.0)) - col_means[j]) / col_stds[j]
+                new_row.append(round(normed, 6))
+            result.append(new_row)
+        return result
+
+    # Matrix layout: each row = one gene, each col = one cell/spot (gene_id already stripped by _read_gene_matrix).
+    # _log_norm normalizes each COLUMN independently → gene-row layout works directly.
+    scrna_norm_raw = _log_norm(scrna_matrix)
+    spatial_norm_raw = _log_norm(spatial_matrix)
+    # scrna_common_idx = row positions of common genes in the original gene order.
+    # Fused row i = [normed_scrna_expr_for_common_gene[i]] + [normed_spatial_expr_for_common_gene[i]]
+    fused_matrix = []
+    for idx_in_common, gene in enumerate(common_genes):
+        orig_scrna_row = scrna_common_idx[idx_in_common]
+        orig_spatial_row = spatial_common_idx[idx_in_common]
+        scrna_row = scrna_norm_raw[orig_scrna_row]
+        spatial_row = spatial_norm_raw[orig_spatial_row]
+        fused_matrix.append(scrna_row + spatial_row)
+
+    scrna_total_counts = [sum(max(row[j], 0.0) for row in scrna_matrix) for j in range(scrna_n_cells)]
+    spatial_total_counts = [sum(max(row[j], 0.0) for row in spatial_matrix) for j in range(spatial_n_spots)]
+    scrna_median = sorted(scrna_total_counts)[len(scrna_total_counts) // 2] if scrna_total_counts else 0
+    spatial_median = sorted(spatial_total_counts)[len(spatial_total_counts) // 2] if spatial_total_counts else 0
+
+    warnings_list = []
+    if scrna_median < 100:
+        warnings_list.append("scRNA-seq 中位细胞总UMI低于100，可能为低质量数据。")
+    if spatial_median < 500:
+        warnings_list.append("空间数据中位spot总计数低于500，可能为低覆盖度。")
+    if len(common_genes) < min(len(scrna_genes), len(spatial_genes)) * 0.3:
+        warnings_list.append(f"共同基因比例低于30%（{len(common_genes)}/{min(len(scrna_genes), len(spatial_genes))}），融合结果可能不完整。")
+
+    header_cols = [f"cell_c{j}" for j in range(scrna_n_cells)] + [f"spot_s{j}" for j in range(spatial_n_spots)]
+    fused_csv_lines = ["gene_id," + ",".join(header_cols)]
+    for i, gene in enumerate(common_genes):
+        fused_csv_lines.append(gene + "," + ",".join(str(v) for v in fused_matrix[i]))
+    fused_content = "\n".join(fused_csv_lines) + "\n"
+
+    generated_artifacts = [
+        {
+            "name": f"fused_matrix_{run_id}.csv",
+            "content": fused_content,
+            "type": "table",
+            "shape": {"genes": len(common_genes), "cells": scrna_n_cells, "spots": spatial_n_spots},
+        }
+    ]
+
+    output = {
+        "fusion_status": "completed",
+        "common_genes": len(common_genes),
+        "scrna_genes": len(scrna_genes),
+        "spatial_genes": len(spatial_genes),
+        "scrna_cells": scrna_n_cells,
+        "spatial_spots": spatial_n_spots,
+        "scrna_median_umis": round(scrna_median, 2),
+        "spatial_median_counts": round(spatial_median, 2),
+        "fused_matrix_shape": [len(common_genes), scrna_n_cells + spatial_n_spots],
+        "joint_analysis": {
+            "method": "log1p-zscore alignment on common gene space",
+            "recommendations": [
+                "使用Seurat/Scanpy进行细胞类型注释后再做空间映射",
+                "考虑使用RCTD或Cell2location进行空间去卷积",
+                f"共同基因数{len(common_genes)}可用于下游差异表达分析",
+            ],
+        },
+        "message": f"成功融合 {len(common_genes)} 个共同基因，{scrna_n_cells} 个细胞 x {spatial_n_spots} 个spot。",
+    }
+
+    return CapabilityResult(
+        status="completed" if not warnings_list else "degraded",
+        output=output,
+        warnings=warnings_list,
+        confidence=0.88 if not warnings_list else 0.70,
+        generated_artifacts=generated_artifacts,
+    )
+
+
 HANDLERS = {
     "artifact_intake": artifact_intake,
     "evidence_review": evidence_review,
@@ -1306,6 +1513,7 @@ HANDLERS = {
     "data_analysis": data_analysis,
     "pipeline_execution": pipeline_execution,
     "pipeline_evolution": pipeline_evolution,
+    "multi_omics_fusion": multi_omics_fusion,
     "research_writing": research_writing,
     "integrity_check": integrity_check,
 }
