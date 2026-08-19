@@ -228,19 +228,17 @@ PIPELINES: dict[str, dict[str, Any]] = {
             "max_memory": {"type": "memory", "control": True},
         },
     },
-    "peptideatlas/panorama360": {
-        "title": "PeptideAtlas Panorama360",
-        "description": "Proteomics data management and sharing platform: mass spectrometry data upload, annotation, and search.",
-        "revision": "1.0.0",
-        "commit_sha": "placeholder_panorama360_sha",
+    "nf-core/diaproteomics": {
+        "title": "nf-core/diaproteomics",
+        "description": "Automated quantitative analysis of DIA proteomics mass spectrometry measurements.",
+        "revision": "1.2.4",
+        "commit_sha": "3527d16af5faad27d44bd2b3a4a42b1fa6ece3c5",
         "minimum_nextflow": "23.04.0",
-        "source_url": "https://github.com/PeptideAtlas/Panorama360",
+        "source_url": "https://github.com/nf-core/diaproteomics",
         "artifact_parameters": {
-            "input": {"required": True, "suffixes": [".csv"]},
-            "fasta": {"required": False, "suffixes": [".fa", ".fasta"]},
+            "input": {"required": True, "suffixes": [".mzML", ".mzML.gz"]},
         },
         "parameters": {
-            "database": {"type": "enum", "values": ["uniprot", "neXtProt"]},
             "max_cpus": {
                 "type": "integer",
                 "minimum": 1,
@@ -250,21 +248,17 @@ PIPELINES: dict[str, dict[str, Any]] = {
             "max_memory": {"type": "memory", "control": True},
         },
     },
-    "metaboanalyst/profiler": {
-        "title": "MetaboAnalyst Profiler",
-        "description": "Metabolomics data processing and statistical profiling: normalization, pathway analysis, and biomarker discovery.",
-        "revision": "1.0.0",
-        "commit_sha": "placeholder_metabo_profiler_sha",
+    "nf-core/metaboigniter": {
+        "title": "nf-core/metaboigniter",
+        "description": "Pre-processing of mass spectrometry-based metabolomics data with quantification.",
+        "revision": "2.0.1",
+        "commit_sha": "55d82547604fcae3b6557fe7a3c442b623184f34",
         "minimum_nextflow": "23.04.0",
-        "source_url": "https://github.com/MetaboAnalyst/MetaboAnalyst-Flow",
+        "source_url": "https://github.com/nf-core/metaboigniter",
         "artifact_parameters": {
-            "input": {"required": True, "suffixes": [".csv", ".txt"]},
+            "input": {"required": True, "suffixes": [".csv", ".mzML"]},
         },
         "parameters": {
-            "normalization": {
-                "type": "enum",
-                "values": ["sum", "median", "pqm", "log"],
-            },
             "max_cpus": {
                 "type": "integer",
                 "minimum": 1,

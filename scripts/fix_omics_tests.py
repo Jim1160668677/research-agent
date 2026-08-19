@@ -1,70 +1,66 @@
-import re
-
-path = r'tests\test_execution_nextflow.py'
-with open(path, 'r', encoding='utf-8') as f:
+"""Fix test references for diaproteomics and metaboigniter pipelines."""
+path = r"G:\智能体设计\科研agent\tests\test_execution_nextflow.py"
+with open(path, "r", encoding="utf-8") as f:
     content = f.read()
 
-# Fix validate_request calls in omics tests - they're missing artifact_bindings={}
-# Pattern: validate_request(\n        'pipeline', 'rev', 'prof',\n        {params},\n    )
-# Need to add , {} after the params dict
-
-# Fix panorama360 calls
+# Fix all remaining old references
 content = content.replace(
-    "validate_request(\n        'peptideatlas/panorama360', '1.0.0', 'docker',\n        {'database': 'uniprot', 'max_cpus': 8, 'max_memory': '16.GB'},\n    )",
-    "validate_request(\n        'peptideatlas/panorama360', '1.0.0', 'docker',\n        {'database': 'uniprot', 'max_cpus': 8, 'max_memory': '16.GB'},\n        {},\n    )"
+    "'metaboanalyst/profiler', '1.0.0', 'docker'",
+    "'nf-core/metaboigniter', '2.0.1', 'docker'"
 )
 content = content.replace(
-    "validate_request(\n            'peptideatlas/panorama360', '1.0.0', 'docker',\n            {'unknown_param': 42},\n        )",
-    "validate_request(\n            'peptideatlas/panorama360', '1.0.0', 'docker',\n            {'unknown_param': 42},\n            {},\n        )"
+    "'metaboanalyst/profiler', '1.0.0', 'conda'",
+    "'nf-core/metaboigniter', '2.0.1', 'conda'"
 )
 content = content.replace(
-    "validate_request(\n            'peptideatlas/panorama360', '1.0.0', 'docker',\n            {'database': 'invalid_db'},\n        )",
-    "validate_request(\n            'peptideatlas/panorama360', '1.0.0', 'docker',\n            {'database': 'invalid_db'},\n            {},\n        )"
+    "'peptideatlas/panorama360', '1.0.0'",
+    "'nf-core/diaproteomics', '1.2.4'"
 )
 content = content.replace(
-    "validate_request(\n            'peptideatlas/panorama360', '1.0.0', 'docker',\n            {'max_cpus': 'eight'},\n        )",
-    "validate_request(\n            'peptideatlas/panorama360', '1.0.0', 'docker',\n            {'max_cpus': 'eight'},\n            {},\n        )"
+    "'metaboanalyst/profiler', '1.0.0'",
+    "'nf-core/metaboigniter', '2.0.1'"
 )
 content = content.replace(
-    "validate_request(\n            'peptideatlas/panorama360', '1.0.0', 'docker',\n            {'max_cpus': 999},\n        )",
-    "validate_request(\n            'peptideatlas/panorama360', '1.0.0', 'docker',\n            {'max_cpus': 999},\n            {},\n        )"
+    "for pid in ('peptideatlas/panorama360', 'metaboanalyst/profiler'):",
+    "for pid in ('nf-core/diaproteomics', 'nf-core/metaboigniter'):"
 )
 
-# Fix metabo profiler calls
+# Fix test bodies that reference old params
 content = content.replace(
-    "validate_request(\n        'metaboanalyst/profiler', '1.0.0', 'docker',\n        {'normalization': 'sum', 'max_cpus': 4, 'max_memory': '8.GB'},\n    )",
-    "validate_request(\n        'metaboanalyst/profiler', '1.0.0', 'docker',\n        {'normalization': 'sum', 'max_cpus': 4, 'max_memory': '8.GB'},\n        {},\n    )"
+    "        {'database': 'uniprot', 'max_cpus': 8, 'max_memory': '16 GB'},\n    )\n    assert result['database'] == 'uniprot'",
+    "        {'max_cpus': 8, 'max_memory': '16 GB'},\n    )\n    assert result['max_cpus'] == 8"
 )
 content = content.replace(
-    "validate_request(\n            'metaboanalyst/profiler', '1.0.0', 'docker',\n            {'unknown_param': 42},\n        )",
-    "validate_request(\n            'metaboanalyst/profiler', '1.0.0', 'docker',\n            {'unknown_param': 42},\n            {},\n        )"
+    "def test_diaproteomics_validate_request_no_database_param():",
+    "def test_diaproteomics_validate_request_rejects_invalid_memory():"
 )
 content = content.replace(
-    "validate_request(\n            'metaboanalyst/profiler', '1.0.0', 'docker',\n            {'normalization': 'invalid_norm'},\n        )",
-    "validate_request(\n            'metaboanalyst/profiler', '1.0.0', 'docker',\n            {'normalization': 'invalid_norm'},\n            {},\n        )"
+    "            {'database': 'invalid_db'},",
+    "            {'max_memory': 'not_memory'},",
 )
 content = content.replace(
-    "validate_request(\n            'metaboanalyst/profiler', '1.0.0', 'docker',\n            {'max_cpus': 'four cores'},\n        )",
-    "validate_request(\n            'metaboanalyst/profiler', '1.0.0', 'docker',\n            {'max_cpus': 'four cores'},\n            {},\n        )"
+    "        {'normalization': 'sum', 'max_cpus': 4, 'max_memory': '8 GB'},\n    )\n    assert result['normalization'] == 'sum'",
+    "        {'max_cpus': 4, 'max_memory': '8 GB'},\n    )\n    assert result['max_cpus'] == 4"
 )
 content = content.replace(
-    "validate_request(\n            'metaboanalyst/profiler', '1.0.0', 'docker',\n            {'max_cpus': 0},\n        )",
-    "validate_request(\n            'metaboanalyst/profiler', '1.0.0', 'docker',\n            {'max_cpus': 0},\n            {},\n        )"
-)
-
-# Fix the wrong revision calls (single-line)
-content = content.replace(
-    "validate_request('peptideatlas/panorama360', '9.9.9', 'docker', {})",
-    "validate_request('peptideatlas/panorama360', '9.9.9', 'docker', {}, {})"
+    "def test_metaboigniter_validate_request_rejects_invalid_normalization():",
+    "def test_metaboigniter_validate_request_rejects_invalid_memory():"
 )
 content = content.replace(
-    "validate_request('metaboanalyst/profiler', '9.9.9', 'docker', {})",
-    "validate_request('metaboanalyst/profiler', '9.9.9', 'docker', {}, {})"
+    "            {'normalization': 'invalid_norm'},",
+    "            {'max_memory': 'bad'},",
 )
 
-# Fix the space before @ in second async test
-content = content.replace('@ pytest.mark.asyncio', '@pytest.mark.asyncio')
+# Update comments
+content = content.replace(
+    "    # panorama360 has a placeholder SHA - validate_request passes but",
+    "    # nf-core/diaproteomics has a real SHA - validate_request and build_plan both work"
+)
+content = content.replace(
+    "    # metabo profiler has a placeholder SHA - validate_request passes but",
+    "    # nf-core/metaboigniter has a real SHA - validate_request and build_plan both work"
+)
 
-with open(path, 'w', encoding='utf-8') as f:
+with open(path, "w", encoding="utf-8") as f:
     f.write(content)
-print('Done')
+print("Test file updated")

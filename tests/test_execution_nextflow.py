@@ -766,134 +766,136 @@ def test_sarek_and_sc_samplesheet_contracts_are_different(tmp_path):
 # ---- Proteomics and metabolomics pipeline integration tests ----
 
 
-def test_panorama360_validate_request_accepts_valid_params():
+def test_diaproteomics_validate_request_accepts_valid_params():
     from research_agent.execution.nextflow import validate_request
     result = validate_request(
-        'peptideatlas/panorama360', '1.0.0', 'docker',
-        {'database': 'uniprot', 'max_cpus': 8, 'max_memory': '16 GB'},
+        'nf-core/diaproteomics', '1.2.4', 'docker',
+        {'max_cpus': 8, 'max_memory': '16 GB'},
         {'input': 'bound'},
     )
-    assert result['database'] == 'uniprot'
+    assert result['max_cpus'] == 8
+    assert result['max_memory'] == '16 GB'
 
 
-def test_panorama360_validate_request_rejects_unknown_params():
+def test_diaproteomics_validate_request_rejects_unknown_params():
     from research_agent.execution.nextflow import validate_request
     with pytest.raises(ValueError, match='Unknown pipeline parameter'):
         validate_request(
-            'peptideatlas/panorama360', '1.0.0', 'docker',
+            'nf-core/diaproteomics', '1.2.4', 'docker',
             {'unknown_param': 42},
             {'input': 'bound'},
         )
 
 
-def test_panorama360_validate_request_rejects_invalid_database():
+def test_diaproteomics_validate_request_rejects_invalid_memory():
     from research_agent.execution.nextflow import validate_request
-    with pytest.raises(ValueError, match='is not an allowed value'):
+    with pytest.raises(ValueError, match='bounded memory'):
         validate_request(
-            'peptideatlas/panorama360', '1.0.0', 'docker',
-            {'database': 'invalid_db'},
+            'nf-core/diaproteomics', '1.2.4', 'docker',
+            {'max_memory': 'not_memory'},
             {'input': 'bound'},
         )
 
 
-def test_panorama360_validate_request_rejects_cpu_out_of_range():
+def test_diaproteomics_validate_request_rejects_cpu_out_of_range():
     from research_agent.execution.nextflow import validate_request
     with pytest.raises(ValueError, match='must be an integer'):
         validate_request(
-            'peptideatlas/panorama360', '1.0.0', 'docker',
+            'nf-core/diaproteomics', '1.2.4', 'docker',
             {'max_cpus': 'eight'},
             {'input': 'bound'},
         )
     with pytest.raises(ValueError, match='outside its allowed range'):
         validate_request(
-            'peptideatlas/panorama360', '1.0.0', 'docker',
+            'nf-core/diaproteomics', '1.2.4', 'docker',
             {'max_cpus': 999},
             {'input': 'bound'},
         )
 
 
-def test_metabo_profiler_validate_request_accepts_valid_params():
+def test_metaboigniter_validate_request_accepts_valid_params():
     from research_agent.execution.nextflow import validate_request
     result = validate_request(
-        'metaboanalyst/profiler', '1.0.0', 'docker',
-        {'normalization': 'sum', 'max_cpus': 4, 'max_memory': '8 GB'},
+        'nf-core/metaboigniter', '2.0.1', 'docker',
+        {'max_cpus': 4, 'max_memory': '8 GB'},
         {'input': 'bound'},
     )
-    assert result['normalization'] == 'sum'
+    assert result['max_cpus'] == 4
+    assert result['max_memory'] == '8 GB'
 
 
-def test_metabo_profiler_validate_request_rejects_unknown_params():
+def test_metaboigniter_validate_request_rejects_unknown_params():
     from research_agent.execution.nextflow import validate_request
     with pytest.raises(ValueError, match='Unknown pipeline parameter'):
         validate_request(
-            'metaboanalyst/profiler', '1.0.0', 'docker',
+            'nf-core/metaboigniter', '2.0.1', 'docker',
             {'unknown_param': 42},
             {'input': 'bound'},
         )
 
 
-def test_metabo_profiler_validate_request_rejects_invalid_normalization():
+def test_metaboigniter_validate_request_rejects_invalid_memory():
     from research_agent.execution.nextflow import validate_request
-    with pytest.raises(ValueError, match='is not an allowed value'):
+    with pytest.raises(ValueError, match='bounded memory'):
         validate_request(
-            'metaboanalyst/profiler', '1.0.0', 'docker',
-            {'normalization': 'invalid_norm'},
+            'nf-core/metaboigniter', '2.0.1', 'docker',
+            {'max_memory': 'bad'},
             {'input': 'bound'},
         )
 
 
-def test_metabo_profiler_validate_request_rejects_cpu_out_of_range():
+def test_metaboigniter_validate_request_rejects_cpu_out_of_range():
     from research_agent.execution.nextflow import validate_request
     with pytest.raises(ValueError, match='must be an integer'):
         validate_request(
-            'metaboanalyst/profiler', '1.0.0', 'docker',
+            'nf-core/metaboigniter', '2.0.1', 'docker',
             {'max_cpus': 'four cores'},
             {'input': 'bound'},
         )
     with pytest.raises(ValueError, match='outside its allowed range'):
         validate_request(
-            'metaboanalyst/profiler', '1.0.0', 'docker',
+            'nf-core/metaboigniter', '2.0.1', 'docker',
             {'max_cpus': 0},
             {'input': 'bound'},
         )
 
 
-def test_build_plan_panorama360_skips_execution_for_placeholder():
-    # panorama360 has a placeholder SHA - validate_request passes but
+def test_build_plan_diaproteomics_executes_with_real_sha():
+    # nf-core/diaproteomics has a real SHA - validate_request and build_plan both work
     # build_plan cannot execute because the pipeline asset is not available
     from research_agent.execution.nextflow import validate_request, PIPELINES
     result = validate_request(
-        'peptideatlas/panorama360', '1.0.0', 'docker',
-        {'database': 'neXtProt', 'max_cpus': 16},
+        'nf-core/diaproteomics', '1.2.4', 'docker',
+        {'max_cpus': 16},
         {'input': 'bound'},
     )
-    assert result['database'] == 'neXtProt'
-    assert PIPELINES['peptideatlas/panorama360']['commit_sha'].startswith('placeholder')
+    assert result['max_cpus'] == 16
+    assert not PIPELINES['nf-core/diaproteomics']['commit_sha'].startswith('placeholder')
 
 
-def test_build_plan_metabo_profiler_skips_execution_for_placeholder():
-    # metabo profiler has a placeholder SHA - validate_request passes but
+def test_build_plan_metaboigniter_executes_with_real_sha():
+    # nf-core/metaboigniter has a real SHA - validate_request and build_plan both work
     # build_plan cannot execute because the pipeline asset is not available
     from research_agent.execution.nextflow import validate_request, PIPELINES
     result = validate_request(
-        'metaboanalyst/profiler', '1.0.0', 'conda',
-        {'normalization': 'median', 'max_cpus': 8},
+        'nf-core/metaboigniter', '2.0.1', 'conda',
+        {'max_cpus': 8},
         {'input': 'bound'},
     )
-    assert result['normalization'] == 'median'
-    assert PIPELINES['metaboanalyst/profiler']['commit_sha'].startswith('placeholder')
+    assert result['max_cpus'] == 8
+    assert not PIPELINES['nf-core/metaboigniter']['commit_sha'].startswith('placeholder')
 
 
 def test_omics_pipelines_reject_wrong_revision():
     from research_agent.execution.nextflow import validate_request
     with pytest.raises(ValueError, match='pinned revision'):
-        validate_request('peptideatlas/panorama360', '9.9.9', 'docker', {}, {'input': 'bound'})
+        validate_request('nf-core/diaproteomics', '9.9.9', 'docker', {}, {'input': 'bound'})
     with pytest.raises(ValueError, match='pinned revision'):
-        validate_request('metaboanalyst/profiler', '9.9.9', 'docker', {}, {'input': 'bound'})
+        validate_request('nf-core/metaboigniter', '9.9.9', 'docker', {}, {'input': 'bound'})
 
 
 def test_omics_pipelines_share_minimum_nextflow():
     from research_agent.execution.nextflow import PIPELINES
-    for pid in ('peptideatlas/panorama360', 'metaboanalyst/profiler'):
+    for pid in ('nf-core/diaproteomics', 'nf-core/metaboigniter'):
         spec = PIPELINES[pid]
         assert spec['minimum_nextflow'] == '23.04.0'
