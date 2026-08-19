@@ -21,6 +21,7 @@ class ResearchPlanner:
         "discovery",
         "experiment",
         "data",
+        "multi_omics",
         "writing",
         "integrity",
     ]
@@ -31,6 +32,7 @@ class ResearchPlanner:
         "data": ("数据", "统计", "分析", "可视化", "csv", "tsv", "表达矩阵", "dataset"),
         "writing": ("写作", "论文", "摘要", "引言", "方法", "讨论", "manuscript", "writing"),
         "integrity": ("规范", "伦理", "引用", "学术", "查重", "合规", "consort", "prisma"),
+        "multi_omics": ("scRNA", "scRNA-seq", "单细胞", "空间转录", "spatial", "multi-omics", "多组学融合", "融合分析"),
     }
     DOMAIN_CAPABILITY = {
         "multimodal": "artifact_intake",
@@ -40,6 +42,7 @@ class ResearchPlanner:
         "data": "data_analysis",
         "writing": "research_writing",
         "integrity": "integrity_check",
+        "multi_omics": "multi_omics_fusion",
     }
 
     def infer_domains(
@@ -162,6 +165,19 @@ class ResearchPlanner:
                 )
             )
 
+        # multi_omics_fusion: triggered when scRNA-seq + spatial keywords detected
+        if "multi_omics" in selected:
+            omics_deps = ["intake"] if "multimodal" in selected else []
+            steps.append(
+                PlanStep(
+                    key="multi_omics",
+                    title=CAPABILITIES["multi_omics_fusion"].title,
+                    capability="multi_omics_fusion",
+                    dependencies=omics_deps,
+                    input_data={"artifact_ids": artifact_ids},
+                )
+            )
+
         pipeline_request = context.get("pipeline")
         if isinstance(pipeline_request, dict) and pipeline_request.get("pipeline_id"):
             pipeline_dependencies = ["intake"] if "multimodal" in selected else []
@@ -194,7 +210,7 @@ class ResearchPlanner:
             dependencies = [
                 step.key
                 for step in steps
-                if step.key in {"literature", "meta_review", "experiment", "data", "pipeline", "pipeline_evolution"}
+                if step.key in {"literature", "meta_review", "experiment", "data", "multi_omics", "pipeline", "pipeline_evolution"}
             ]
             steps.append(
                 PlanStep(

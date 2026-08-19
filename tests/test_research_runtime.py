@@ -902,3 +902,40 @@ async def test_pipeline_run_merges_stored_defaults(tmp_path, monkeypatch):
         defaults = (prof.skill_preferences or {}).get("pipeline_defaults", {})
         assert defaults["nf-core/rnaseq"]["max_cpus"] == "8"
         assert defaults["nf-core/rnaseq"]["max_memory"] == "16.Gb"
+
+
+def test_planner_auto_triggers_multi_omics_for_scrna_spatial():
+    """When objective contains scRNA-seq + spatial keywords, planner adds multi_omics step."""
+    plan = ResearchPlanner().plan(
+        "对 scRNA-seq 和空间转录组数据做多组学融合分析",
+        network_allowed=True,
+    )
+    value = plan.to_dict()
+    keys = [step["key"] for step in value["steps"]]
+    assert "multi_omics" in keys
+    multi_step = next(s for s in value["steps"] if s["key"] == "multi_omics")
+    assert multi_step["capability"] == "multi_omics_fusion"
+    # multi_omics step should come after data/intake and before writing
+    data_idx = keys.index("data")
+    omics_idx = keys.index("multi_omics")
+    assert omics_idx > data_idx
+    # writing depends on multi_omics
+    writing_step = next((s for s in value["steps"] if s["key"] == "writing"), None)
+    if writing_step:
+        assert "multi_omics" in writing_step.get("dependencies", [])
+
+
+def test_planner_multi_omics_with_artifacts():
+    """multi_omics step depends on intake when artifact_ids are provided."""
+    plan = ResearchPlanner().plan(
+        "scRNA-seq 与 spatial 数据联合分析",
+        artifact_ids=["art-001", "art-002"],
+        network_allowed=True,
+    )
+    value = plan.to_dict()
+    keys = [step["key"] for step in value["steps"]]
+    assert "multi_omics" in keys
+    assert "intake" in keys
+    omics_idx = keys.index("multi_omics")
+    intake_idx = keys.index("intake")
+    assert intake_idx < omics_idx  # intake must precede multi_omics
