@@ -28,6 +28,7 @@ from sqlalchemy.orm import selectinload
 from ...audit_chain import append_audit
 from ...reporting.brief import build_brief_markdown
 from ...reporting.rocrate import generate_rocrate
+from ...research.param_predictor import predict_for_new_run, estimate_sample_sufficiency
 from ...research.artifacts import ArtifactError, public_artifact
 from ...research.contracts import list_capabilities
 from ...research.manager import get_run_manager
@@ -82,6 +83,15 @@ class ArtifactMigrationRequest(BaseModel):
 
 class ReportFormat(BaseModel):
     format: Literal["md", "html", "pdf"] = "pdf"
+
+
+class ParamPredictRequest(BaseModel):
+    pipeline_id: str = Field(..., min_length=1, max_length=200)
+    revision: str = Field(default="", max_length=80)
+    profile: str = Field(default="docker", max_length=40)
+    system_memory_gb: float = Field(default=32.0, gt=0, le=1024)
+    system_cpus: int = Field(default=8, ge=1, le=256)
+    prior_parameters: dict[str, str] = Field(default_factory=dict)
 
 
 def _bounded_context(context: dict[str, Any]) -> dict[str, Any]:
@@ -519,6 +529,33 @@ async def generate_report(
         },
     )
 
+
+
+@router.post("/runs/params/predict")
+async def predict_run_parameters(
+    request: ParamPredictRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Predict optimal parameters for a new pipeline run based on historical data."""
+    result = await predict_for_new_run(
+        user_id=current_user["user_id"],
+        pipeline_id=request.pipeline_id,
+        revision=request.revision,
+        profile=request.profile,
+        system_memory_gb=request.system_memory_gb,
+        system_cpus=request.system_cpus,
+        prior_parameters=request.prior_parameters,
+    )
+    sufficient, suff_msg = estimate_sample_sufficiency(result.historical_runs_analyzed)
+    return {
+        "pipeline_id": request.pipeline_id,
+        "revision": request.revision or "latest",
+        "recommendations": result.to_dict()["recommendations"],
+        "confidence": result.confidence,
+        "historical_runs_analyzed": result.historical_runs_analyzed,
+        "data_sufficiency": {"sufficient": sufficient, "message": suff_msg},
+        "warnings": result.warnings,
+    }
 
 
 @router.post("/runs/{run_id}/rocrate")
