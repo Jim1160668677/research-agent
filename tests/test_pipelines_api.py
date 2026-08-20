@@ -36,12 +36,11 @@ def test_catalog_discloses_pins_and_execution_policy(client):
     data = response.json()
     assert data["policy"] == "allowlisted-and-revision-pinned"
     pins = {item["id"]: item["revision"] for item in data["pipelines"]}
-    # Verify pipeline set (spatial replaced by spatialvi + spatialaxe; proteomics/metabolomics added)
     assert set(pins.keys()) == {
         "nf-core/rnaseq", "nf-core/sarek",
         "nf-core/atacseq", "nf-core/chipseq",
         "nf-core/scrnaseq", "nf-core/spatialvi", "nf-core/spatialaxe",
-        "peptideatlas/panorama360", "metaboanalyst/profiler",
+        "nf-core/diaproteomics", "nf-core/metaboigniter",
     }
     assert pins["nf-core/rnaseq"] == "3.26.0"
     assert pins["nf-core/sarek"] == "3.9.0"
@@ -50,6 +49,8 @@ def test_catalog_discloses_pins_and_execution_policy(client):
     assert pins["nf-core/scrnaseq"] == "4.2.0"
     assert pins["nf-core/spatialvi"] == "0.1.0"
     assert pins["nf-core/spatialaxe"] == "1.0.1"
+    assert pins["nf-core/diaproteomics"] == "1.2.4"
+    assert pins["nf-core/metaboigniter"] == "2.0.1"
     assert data["execution_requires_role"] == "admin"
 
 
