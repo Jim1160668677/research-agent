@@ -644,12 +644,126 @@ class AgnesCLIProvider(LLMProvider):
         }
 
 
+class OllamaProvider(LLMProvider):
+    """Ollama local model provider via OpenAI-compatible API.
+
+    Requires no API key. Falls back to local Ollama when cloud providers
+    are unavailable (e.g. offline mode, network outage).
+    """
+
+    name = "ollama"
+    display_name = "Ollama (Local)"
+    models = ["llama3", "llama3.1", "mistral", "phi3", "qwen2.5", "smollm2", "nomic-embed-text"]
+    execution_mode = "sdk"
+    capabilities = ("text", "tool_calling", "json")
+    default_base_url = "http://localhost:11434/v1"
+
+    def __init__(self, api_key: str = "", model: str = "", config: dict[str, Any] = None):
+        super().__init__(api_key, model, config)
+        self._base_url = self.config.get("base_url") or self.default_base_url
+
+    def check_connection(self) -> bool:
+        """Ollama requires no API key – always considered configured."""
+        return True
+
+    async def chat(self, messages: list[LLMMessage], **kwargs) -> LLMResponse:
+        from openai import AsyncOpenAI
+
+        timeout = min(max(float(self.config.get("timeout_seconds", 120)), 1.0), 600.0)
+        retries = min(max(int(self.config.get("max_retries", 2)), 0), 5)
+        client = AsyncOpenAI(
+            api_key="ollama",
+            base_url=self._base_url,
+            timeout=timeout,
+            max_retries=0,
+        )
+        payload = [{"role": message.role, "content": message.content} for message in messages]
+        request: dict[str, Any] = {
+            "model": self.model,
+            "messages": payload,
+            "temperature": kwargs.get("temperature", 0.1),
+            "max_tokens": kwargs.get("max_tokens", 2000),
+        }
+        if kwargs.get("stream", False):
+            request["stream"] = True
+
+        attempts = 0
+        started = time.perf_counter()
+        try:
+            async for attempt in AsyncRetrying(
+                stop=stop_after_attempt(retries + 1),
+                wait=wait_random_exponential(multiplier=0.5, max=3.0),
+                retry=retry_if_exception(_retryable),
+                reraise=True,
+            ):
+                with attempt:
+                    attempts = attempt.retry_state.attempt_number
+                    response = await client.chat.completions.create(**request)
+            message = response.choices[0].message
+            usage = response.usage
+            return LLMResponse(
+                content=message.content or "",
+                provider=self.name,
+                model=getattr(response, "model", None) or self.model,
+                usage={
+                    "prompt_tokens": getattr(usage, "prompt_tokens", 0) or 0,
+                    "completion_tokens": getattr(usage, "completion_tokens", 0) or 0,
+                    "total_tokens": getattr(usage, "total_tokens", 0) or 0,
+                },
+                raw=response,
+                attempts=max(attempts, 1),
+                latency_ms=int((time.perf_counter() - started) * 1000),
+            )
+        except Exception as error:
+            detail = _error_details(error, self.name)
+            logger.warning(
+                "{} model call failed: code={} attempts={}", self.name, detail.code, attempts
+            )
+            raise detail from error
+
+    async def health_check(self, *, live: bool = False) -> dict[str, Any]:
+        base = {
+            "provider": self.name,
+            "model": self.model,
+            "configured": True,
+            "execution_mode": self.execution_mode,
+            "live": live,
+            "base_url": self._base_url,
+        }
+        if not live:
+            return {
+                **base,
+                "success": True,
+                "code": "configured",
+                "message": "Ollama 本地配置完整，尚未发起网络请求。",
+            }
+        # Live probe: check if Ollama server is reachable
+        started = time.perf_counter()
+        try:
+            import httpx
+            resp = await httpx.AsyncClient(timeout=5).get(
+                self._base_url.replace("/v1", ""),
+            )
+            if resp.status_code == 200:
+                return {
+                    **base,
+                    "success": True,
+                    "code": "ok",
+                    "message": "Ollama 服务可用。",
+                    "latency_ms": int((time.perf_counter() - started) * 1000),
+                }
+            return {**base, "success": False, "code": "unreachable", "message": f"HTTP {resp.status_code}"}
+        except Exception as error:
+            return {**base, "success": False, "code": "unreachable", "message": str(error)}
+
+
 PROVIDER_REGISTRY: dict[str, type[LLMProvider]] = {
     "openai": OpenAIProvider,
     "deepseek": DeepSeekProvider,
     "agnes": AgnesCLIProvider,
     "anthropic": AnthropicProvider,
     "google": GeminiProvider,
+    "ollama": OllamaProvider,
 }
 
 
@@ -682,6 +796,7 @@ __all__ = [
     "AgnesCLIProvider",
     "AnthropicProvider",
     "GeminiProvider",
+    "OllamaProvider",
     "PROVIDER_REGISTRY",
     "provider_descriptors",
     "get_provider",

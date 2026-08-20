@@ -15,6 +15,7 @@ from .provider import (
     OpenAIProvider,
     get_provider,
     provider_descriptors,
+    OllamaProvider,
 )
 
 __all__ = [
@@ -30,6 +31,7 @@ __all__ = [
     "PROVIDER_REGISTRY",
     "provider_descriptors",
     "get_provider",
+    "OllamaProvider",
     "APIKeyManager",
     "get_key_manager",
     "ENV_KEY_MAP",

@@ -7,7 +7,7 @@ from loguru import logger
 from ..core.app import settings
 from ..runtime_coordinator import get_runtime_coordinator
 from .keys import get_key_manager
-from .provider import LLMMessage, LLMProvider, get_provider
+from .provider import LLMMessage, LLMProvider, LLMProviderError, get_provider
 
 try:
     from sqlalchemy import select
@@ -174,6 +174,15 @@ class ChatEngine:
         for provider in ("deepseek", "agnes", "openai", "anthropic", "google"):
             if getattr(settings, f"{provider}_api_key", ""):
                 return provider, getattr(settings, f"{provider}_model", "")
+        # Offline fallback: probe local Ollama instance
+        try:
+            import httpx
+            resp = await httpx.AsyncClient(timeout=3).get("http://localhost:11434/api/tags")
+            if resp.status_code == 200:
+                return "ollama", "llama3"
+        except Exception:
+            pass  # Ollama not available
+
         return "openai", getattr(settings, "openai_model", "")
 
     async def _get_provider(self) -> LLMProvider:
@@ -228,8 +237,31 @@ class ChatEngine:
 
         provider = await self._get_provider()
         operation_id = self.session_id or f"user-{self.user_id or 'anonymous'}"
-        async with get_runtime_coordinator().lease("llm", operation_id):
-            response = await provider.chat(messages, **kwargs)
+        response = None
+        _used_ollama = False
+        try:
+            async with get_runtime_coordinator().lease("llm", operation_id):
+                response = await provider.chat(messages, **kwargs)
+        except LLMProviderError as _err:
+            logger.warning("Primary provider failed ({}): {}, trying Ollama fallback", provider.name, _err.code)
+            if provider.name != "ollama":
+                try:
+                    from .provider import OllamaProvider
+                    ollama = OllamaProvider(model="llama3")
+                    async with get_runtime_coordinator().lease("llm", operation_id):
+                        response = await ollama.chat(messages, **kwargs)
+                    _used_ollama = True
+                    logger.info("Fell back to Ollama successfully")
+                except Exception as _ollama_err:
+                    logger.error("Ollama fallback also failed: {}", _ollama_err)
+                    raise RuntimeError(
+                        f"All LLM providers failed: primary={_err}, ollama={_ollama_err}"
+                    ) from _ollama_err
+            else:
+                raise
+
+        if response is None:
+            raise RuntimeError("LLM call returned no response from any provider")
 
         # 记录对话到内存
         self._conversation_history.append(
