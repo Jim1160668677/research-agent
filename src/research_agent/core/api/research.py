@@ -27,6 +27,7 @@ from sqlalchemy.orm import selectinload
 
 from ...audit_chain import append_audit
 from ...reporting.brief import build_brief_markdown
+from ...reporting.rocrate import generate_rocrate
 from ...research.artifacts import ArtifactError, public_artifact
 from ...research.contracts import list_capabilities
 from ...research.manager import get_run_manager
@@ -513,6 +514,60 @@ async def generate_report(
         headers={
             "Content-Disposition": disposition,
             "Content-Length": str(len(content)),
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+
+@router.post("/runs/{run_id}/rocrate")
+async def generate_rocrate_export(
+    run_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """生成 RO-Crate 研究结果压缩包。"""
+    result = await db.execute(
+        select(ResearchRun).options(selectinload(ResearchRun.steps)).where(
+            ResearchRun.id == run_id,
+            ResearchRun.user_id == current_user["user_id"],
+        )
+    )
+    run = result.scalar_one_or_none()
+    if not run:
+        raise HTTPException(status_code=404, detail="科研任务不存在")
+    artifacts_result = await db.execute(
+        select(ResearchArtifact).where(
+            ResearchArtifact.run_id == run.id,
+        ).order_by(ResearchArtifact.created_at.asc())
+    )
+    artifacts = [public_artifact(item) for item in artifacts_result.scalars().all()]
+    pipeline_result = await db.execute(
+        select(PipelineRun).where(PipelineRun.run_id == run.id).order_by(PipelineRun.created_at.asc())
+    )
+    pipeline_runs = [
+        {
+            "pipeline_id": item.pipeline_id,
+            "revision": item.revision,
+            "profile": item.profile,
+            "status": item.status,
+            "task_summary": (item.result or {}).get("task_summary", {}),
+            "error": item.error,
+        }
+        for item in pipeline_result.scalars().all()
+    ]
+    store = get_run_manager().artifact_store
+    crate_bytes, filename = await generate_rocrate(
+        _run_dict(run), artifacts, pipeline_runs, store.root
+    )
+    disposition = f"attachment; filename={filename}; filename*=UTF-8''{quote(filename)}"
+    return Response(
+        content=crate_bytes,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": disposition,
+            "Content-Length": str(len(crate_bytes)),
             "X-Content-Type-Options": "nosniff",
             "Cache-Control": "no-store",
         },
