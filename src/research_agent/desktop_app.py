@@ -108,10 +108,18 @@ def load_window_state() -> dict[str, Any]:
             return {}
         width = data.get("width")
         height = data.get("height")
-        if width is not None and (not isinstance(width, int) or width < 640):
+        min_w = DESKTOP_CONFIG["window_min_width"]
+        min_h = DESKTOP_CONFIG["window_min_height"]
+        max_w = 3840
+        max_h = 2160
+        if width is not None and (not isinstance(width, int) or width < min_w or width > max_w):
             data.pop("width", None)
-        if height is not None and (not isinstance(height, int) or height < 480):
+        if height is not None and (not isinstance(height, int) or height < min_h or height > max_h):
             data.pop("height", None)
+        for axis in ("x", "y"):
+            val = data.get(axis)
+            if val is not None and (not isinstance(val, int) or val < -10000):
+                data.pop(axis, None)
         return data
     except (OSError, ValueError, TypeError):
         return {}
@@ -119,7 +127,18 @@ def load_window_state() -> dict[str, Any]:
 
 def save_window_state(state: dict[str, Any]) -> None:
     try:
-        _atomic_write_text(get_state_file(), json.dumps(state, ensure_ascii=False, indent=2))
+        safe = {}
+        w = state.get("width")
+        h = state.get("height")
+        if isinstance(w, int) and DESKTOP_CONFIG["window_min_width"] <= w <= 3840:
+            safe["width"] = w
+        if isinstance(h, int) and DESKTOP_CONFIG["window_min_height"] <= h <= 2160:
+            safe["height"] = h
+        for axis in ("x", "y"):
+            val = state.get(axis)
+            if isinstance(val, int) and val >= -10000:
+                safe[axis] = val
+        _atomic_write_text(get_state_file(), json.dumps(safe, ensure_ascii=False, indent=2))
     except OSError as exc:
         logger.debug(f"保存窗口状态失败: {exc}")
 
@@ -512,11 +531,15 @@ class DesktopApp:
             import webview
 
             state = self._window_state
+            width = state.get("width", DESKTOP_CONFIG["window_width"])
+            height = state.get("height", DESKTOP_CONFIG["window_height"])
+            width = max(DESKTOP_CONFIG["window_min_width"], min(width, 3840))
+            height = max(DESKTOP_CONFIG["window_min_height"], min(height, 2160))
             kwargs = {
                 "title": DESKTOP_CONFIG["app_title"],
                 "url": self.backend.base_url,
-                "width": state.get("width", DESKTOP_CONFIG["window_width"]),
-                "height": state.get("height", DESKTOP_CONFIG["window_height"]),
+                "width": width,
+                "height": height,
                 "min_size": (
                     DESKTOP_CONFIG["window_min_width"],
                     DESKTOP_CONFIG["window_min_height"],
@@ -526,8 +549,10 @@ class DesktopApp:
                 "background_color": "#f8fafc",
                 "on_top": bool(state.get("always_on_top", False)),
             }
-            if isinstance(state.get("x"), int) and isinstance(state.get("y"), int):
-                kwargs.update(x=state["x"], y=state["y"])
+            x = state.get("x")
+            y = state.get("y")
+            if isinstance(x, int) and isinstance(y, int) and x > -10000 and y > -10000:
+                kwargs.update(x=x, y=y)
             self.window = webview.create_window(**kwargs)
             for event_name, handler in (
                 ("closed", self._on_window_closed),
