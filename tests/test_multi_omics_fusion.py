@@ -1,12 +1,11 @@
 """Tests for multi_omics_fusion handler."""
-import asyncio
 import csv
-import pytest
-from pathlib import Path
 
+import pytest
+
+from research_agent.research.artifacts import ArtifactStore
 from research_agent.research.contracts import CAPABILITIES
 from research_agent.research.services import multi_omics_fusion
-from research_agent.research.artifacts import ArtifactStore
 
 
 @pytest.fixture

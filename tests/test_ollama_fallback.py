@@ -1,11 +1,12 @@
 """Tests for Ollama offline provider and fallback logic."""
-import pytest
+import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import sys
+import pytest
+
 sys.path.insert(0, "src")
 
-from research_agent.llm.provider import OllamaProvider, LLMMessage, LLMProviderError
+from research_agent.llm.provider import LLMMessage, LLMProviderError, OllamaProvider
 
 
 class TestOllamaProvider:
@@ -49,10 +50,10 @@ class TestOllamaProvider:
         provider = OllamaProvider()
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        with patch("httpx.AsyncClient") as MockClient:
+        with patch("httpx.AsyncClient") as mock_ctx:
             mock_client = AsyncMock()
             mock_client.get = AsyncMock(return_value=mock_resp)
-            MockClient.return_value = mock_client
+            mock_ctx.return_value = mock_client
             result = await provider.health_check(live=True)
         assert result["success"] is True
         assert result["code"] == "ok"
@@ -61,10 +62,10 @@ class TestOllamaProvider:
     @pytest.mark.asyncio
     async def test_health_check_live_unreachable(self):
         provider = OllamaProvider()
-        with patch("httpx.AsyncClient") as MockClient:
+        with patch("httpx.AsyncClient") as mock_ctx:
             mock_client = AsyncMock()
             mock_client.get = AsyncMock(side_effect=ConnectionError("Connection refused"))
-            MockClient.return_value = mock_client
+            mock_ctx.return_value = mock_client
             result = await provider.health_check(live=True)
         assert result["success"] is False
         assert result["code"] == "unreachable"
@@ -159,10 +160,10 @@ class TestOllamaFallback:
         # Mock httpx probe to succeed
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        with patch("httpx.AsyncClient") as MockClient:
+        with patch("httpx.AsyncClient") as mock_ctx:
             mock_client = AsyncMock()
             mock_client.get = AsyncMock(return_value=mock_resp)
-            MockClient.return_value = mock_client
+            mock_ctx.return_value = mock_client
             provider_name, model = await engine._preferred_provider_model()
 
         assert provider_name == "ollama"
@@ -177,10 +178,10 @@ class TestOllamaFallback:
         monkeypatch.setattr("research_agent.llm.chat._db_available", False)
 
         # Mock httpx probe to fail
-        with patch("httpx.AsyncClient") as MockClient:
+        with patch("httpx.AsyncClient") as mock_ctx:
             mock_client = AsyncMock()
             mock_client.get = AsyncMock(side_effect=Exception("refused"))
-            MockClient.return_value = mock_client
+            mock_ctx.return_value = mock_client
             provider_name, model = await engine._preferred_provider_model()
 
         assert provider_name == "openai"

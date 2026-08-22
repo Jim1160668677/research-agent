@@ -8,7 +8,6 @@
 
 from __future__ import annotations
 
-import csv
 import hashlib
 import io
 import json
@@ -17,9 +16,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
-
-from ..research.artifacts import ArtifactError
-
 
 # RO-Crate 必需的核心元数据关键字段
 _CORE_METADATA = {

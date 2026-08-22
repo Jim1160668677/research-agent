@@ -15,11 +15,9 @@ from __future__ import annotations
 import hashlib
 import re
 import statistics
-from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 
 @dataclass
@@ -95,8 +93,9 @@ class PredictionResult:
 
 async def load_historical_runs(user_id: int, pipeline_id: str, revision: str) -> list[dict[str, Any]]:
     """Load historical pipeline runs for a given pipeline/revision from the DB."""
-    from ..core import db as db_module
     from sqlalchemy import select
+
+    from ..core import db as db_module
     from ..core.models.db import PipelineRun
 
     async with db_module.AsyncSessionLocal() as db:
@@ -134,12 +133,12 @@ def _normalize_param_value(v: Any) -> str:
         return "None"
     if isinstance(v, bool):
         return str(v).lower()
-    if isinstance(v, (int, float)):
+    if isinstance(v, int | float):
         return str(v)
     return str(v)
 
 
-def _compute_elapsed(started: Optional[datetime], completed: Optional[datetime]) -> Optional[float]:
+def _compute_elapsed(started: datetime | None, completed: datetime | None) -> float | None:
     if started and completed:
         delta = (completed - started).total_seconds()
         return max(delta, 0.0)
@@ -152,7 +151,7 @@ def _compute_elapsed(started: Optional[datetime], completed: Optional[datetime])
 
 def predict_parameters(
     context: PredictionContext,
-    historical_runs: Optional[list[dict[str, Any]]] = None,
+    historical_runs: list[dict[str, Any]] | None = None,
 ) -> PredictionResult:
     """Predict optimal parameters based on historical run data.
 
@@ -278,7 +277,7 @@ def _recency_weight(sorted_runs: list[dict], outcomes: list[bool], now: datetime
     # Simplified: if most outcomes are from recent runs (last 30 days), boost weight
     recent_threshold = now - timedelta(days=30)
     recent_count = sum(
-        1 for r, o in zip(sorted_runs, outcomes)
+        1 for r, o in zip(sorted_runs, outcomes, strict=False)
         if r.get("created_at", now) >= recent_threshold and o
     )
     total_recent = sum(1 for r in sorted_runs if r.get("created_at", now) >= recent_threshold)
@@ -395,7 +394,7 @@ def _merge_with_prior(
     prior: dict[str, Any],
 ) -> list[ParamRecommendation]:
     """Merge recommendations with user's prior/explicit parameters.
-    
+
     User-specified parameters are never overridden by predictions.
     """
     prior_set = set(prior.keys())
@@ -459,10 +458,10 @@ async def predict_for_new_run(
     profile: str,
     system_memory_gb: float = 32.0,
     system_cpus: int = 8,
-    prior_parameters: Optional[dict[str, Any]] = None,
+    prior_parameters: dict[str, Any] | None = None,
 ) -> PredictionResult:
     """Proactively predict parameters before a run is created.
-    
+
     Loads historical data and generates recommendations suitable for
     pre-execution parameter selection.
     """
@@ -488,12 +487,13 @@ async def diagnose_and_recommend(
     user_id: int,
 ) -> PredictionResult:
     """After a run fails, diagnose the issue and recommend parameter fixes.
-    
+
     Loads all historical runs (including the failed one) and generates
     targeted fix recommendations.
     """
-    from ..core import db as db_module
     from sqlalchemy import select
+
+    from ..core import db as db_module
     from ..core.models.db import PipelineRun
 
     async with db_module.AsyncSessionLocal() as db:
@@ -541,9 +541,10 @@ async def diagnose_and_recommend(
     return predict_parameters(context, runs_dict)
 
 
-async def _get_pipeline_id_for_run(db, run_id: str) -> Optional[str]:
+async def _get_pipeline_id_for_run(db, run_id: str) -> str | None:
     """Helper to look up pipeline_id for a given research run_id."""
     from sqlalchemy import select
+
     from ..core.models.db import PipelineRun
     result = await db.execute(
         select(PipelineRun.pipeline_id).where(PipelineRun.run_id == run_id).limit(1)

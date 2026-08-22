@@ -12,10 +12,10 @@ from .provider import (
     LLMProvider,
     LLMProviderError,
     LLMResponse,
+    OllamaProvider,
     OpenAIProvider,
     get_provider,
     provider_descriptors,
-    OllamaProvider,
 )
 
 __all__ = [

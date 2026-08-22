@@ -4,7 +4,6 @@ import hashlib
 import json
 import zipfile
 from io import BytesIO
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -91,8 +90,8 @@ def _make_artifact(name, content, sha256, kind="output", media_type="text/csv"):
 @pytest.mark.asyncio
 async def test_e2e_multi_omics_fusion_to_rocrate(tmp_path):
     from research_agent.reporting.rocrate import generate_rocrate
-    from research_agent.research.services import multi_omics_fusion
     from research_agent.research.artifacts import ArtifactStore
+    from research_agent.research.services import multi_omics_fusion
 
     store_root = tmp_path / "artifacts"
     store = ArtifactStore(store_root)
@@ -183,11 +182,12 @@ async def test_e2e_multi_omics_fusion_to_rocrate(tmp_path):
 
 @pytest.mark.asyncio
 async def test_e2e_rocrate_api_via_fusion_run(tmp_path, monkeypatch):
-    from research_agent.core.db import init_db, AsyncSessionLocal
-    from research_agent.core.models.db import ResearchRun, ResearchRunStep
+    import uuid
+
     from research_agent.core.api.research import router as research_router
     from research_agent.core.auth import create_access_token
-    import uuid
+    from research_agent.core.db import AsyncSessionLocal, init_db
+    from research_agent.core.models.db import ResearchRun, ResearchRunStep
 
     await init_db()
 

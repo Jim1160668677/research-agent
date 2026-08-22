@@ -1,18 +1,15 @@
 """Tests for unified_data module."""
 import csv
+
 import pytest
-from pathlib import Path
 
-from research_agent.research.unified_data import (
-    UnifiedMatrix,
-    OmicsMatrixMeta,
-    log1p_zscore,
-    validate_matrix,
-    convert_to_unified,
-    read_matrix_from_store,
-)
 from research_agent.research.artifacts import ArtifactStore
-
+from research_agent.research.unified_data import (
+    convert_to_unified,
+    log1p_zscore,
+    read_matrix_from_store,
+    validate_matrix,
+)
 
 # ---------------------------------------------------------------------------
 # validate_matrix
@@ -87,7 +84,6 @@ def test_log1p_zscore_empty():
 
 
 def test_convert_to_unified_basic(tmp_path):
-    store = ArtifactStore(tmp_path / "artifacts")
     rows = [
         ["gene_id", "c1", "c2"],
         ["G1", "10", "20"],

@@ -28,10 +28,10 @@ from sqlalchemy.orm import selectinload
 from ...audit_chain import append_audit
 from ...reporting.brief import build_brief_markdown
 from ...reporting.rocrate import generate_rocrate
-from ...research.param_predictor import predict_for_new_run, estimate_sample_sufficiency
 from ...research.artifacts import ArtifactError, public_artifact
 from ...research.contracts import list_capabilities
 from ...research.manager import get_run_manager
+from ...research.param_predictor import estimate_sample_sufficiency, predict_for_new_run
 from ...research.planner import ResearchPlanner
 from ..auth import get_current_user
 from ..db import get_db

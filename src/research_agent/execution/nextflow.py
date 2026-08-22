@@ -522,17 +522,17 @@ def validate_samplesheet(pipeline_id: str, path: Path) -> dict[str, Any]:
                 counts = str(row.get("counts") or "").strip()
                 if not sample or not barcodes or not counts:
                     raise ValueError(
-                        f"{pipeline_id.split("/")[-1]} samplesheet row {row_number} "
+                        f"{pipeline_id.split('/')[-1]} samplesheet row {row_number} "
                         f"needs sample, barcodes, and counts columns"
                     )
                 if not barcodes.lower().endswith((".gz", ".h5", ".h5ad", ".tsv")):
                     raise ValueError(
-                        f"{pipeline_id.split("/")[-1]} samplesheet row {row_number} "
+                        f"{pipeline_id.split('/')[-1]} samplesheet row {row_number} "
                         f"has an invalid barcodes file"
                     )
                 if not counts.lower().endswith((".h5", ".h5ad", ".tsv", ".mtx")):
                     raise ValueError(
-                        f"{pipeline_id.split("/")[-1]} samplesheet row {row_number} "
+                        f"{pipeline_id.split('/')[-1]} samplesheet row {row_number} "
                         f"has an invalid counts file"
                     )
                 key = (sample, barcodes, counts)

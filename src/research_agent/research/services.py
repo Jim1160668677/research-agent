@@ -902,20 +902,19 @@ async def integrity_check(payload: dict[str, Any]) -> CapabilityResult:
 
 async def pipeline_evolution(payload: dict[str, Any]) -> CapabilityResult:
     """Based on historical runs and user feedback, generate pipeline parameter optimization proposals."""
-    from datetime import datetime, timezone
-    import uuid as _uuid
     import re as _re
+    import uuid as _uuid
+
+    from sqlalchemy import select
 
     from ..core import db as db_module
-    from sqlalchemy import select
-    from ..core.models.db import AgentFeedback, LearningProposal, PipelineRun
-    from ..llm.provider import LLMMessage, get_provider
-    from ..llm.keys import get_key_manager
     from ..core.app import settings
+    from ..core.models.db import AgentFeedback, LearningProposal, PipelineRun
+    from ..llm.keys import get_key_manager
+    from ..llm.provider import LLMMessage, get_provider
 
     user_id = int(payload["user_id"])
     run_id = str(payload["run_id"])
-    artifact_store = payload.get("artifact_store")
 
     proposal_ids = []
     signals = []
@@ -1094,7 +1093,7 @@ async def pipeline_evolution(payload: dict[str, Any]) -> CapabilityResult:
     if cross_pipeline_runs:
         cross_completed = [r for r in cross_pipeline_runs if r.status == "completed"]
         cross_failed = [r for r in cross_pipeline_runs if r.status == "failed"]
-        cross_pipeline_ids = set(r.pipeline_id for r in cross_pipeline_runs)
+        cross_pipeline_ids = {r.pipeline_id for r in cross_pipeline_runs}
 
         if len(cross_pipeline_ids) >= 2:
             signals.append(f"跨流水线信号: {len(cross_pipeline_runs)} 次运行来自 {len(cross_pipeline_ids)} 个不同流水线")
@@ -1301,9 +1300,8 @@ async def multi_omics_fusion(payload: dict[str, Any]) -> CapabilityResult:
     and normalisation.  Aligns both matrices on the common gene space, applies
     column-wise log1p-zscore normalisation, and writes a fused wide-form matrix.
     """
-    import csv
 
-    from .unified_data import read_matrix_from_store, log1p_zscore
+    from .unified_data import log1p_zscore, read_matrix_from_store
 
     store: ArtifactStore = payload["artifact_store"]
     user_id = int(payload["user_id"])
@@ -1367,7 +1365,7 @@ async def multi_omics_fusion(payload: dict[str, Any]) -> CapabilityResult:
 
     # Build fused matrix: one row per common gene, columns = scrna cells + spatial spots.
     fused_matrix: list[list[float]] = []
-    for idx_in_common, gene in enumerate(common_genes):
+    for idx_in_common, _gene in enumerate(common_genes):
         r = scrna_common_idx[idx_in_common]
         s = spatial_common_idx[idx_in_common]
         fused_matrix.append(scrna_norm[r] + spatial_norm[s])
@@ -1399,7 +1397,7 @@ async def multi_omics_fusion(payload: dict[str, Any]) -> CapabilityResult:
         + [f"spot_s{j}" for j in range(n_spatial_spots)]
     )
     fused_csv_lines = ["gene_id," + ",".join(header_cols)]
-    for gene, row in zip(common_genes, fused_matrix):
+    for gene, row in zip(common_genes, fused_matrix, strict=False):
         fused_csv_lines.append(gene + "," + ",".join(str(v) for v in row))
     fused_content = "\n".join(fused_csv_lines) + "\n"
 

@@ -573,7 +573,7 @@ def test_spatialaxe_rejects_invalid_platform():
 
 def test_sc_pipelines_reject_wrong_revision():
     from research_agent.execution.nextflow import validate_request
-    for pipeline_id, expected_rev in [("nf-core/scrnaseq", "4.2.0"),
+    for pipeline_id, _expected_rev in [("nf-core/scrnaseq", "4.2.0"),
                                        ("nf-core/spatialvi", "0.1.0"),
                                        ("nf-core/spatialaxe", "1.0.1")]:
         with pytest.raises(ValueError, match="pinned revision"):
@@ -863,7 +863,7 @@ def test_metaboigniter_validate_request_rejects_cpu_out_of_range():
 def test_build_plan_diaproteomics_executes_with_real_sha():
     # nf-core/diaproteomics has a real SHA - validate_request and build_plan both work
     # build_plan cannot execute because the pipeline asset is not available
-    from research_agent.execution.nextflow import validate_request, PIPELINES
+    from research_agent.execution.nextflow import PIPELINES, validate_request
     result = validate_request(
         'nf-core/diaproteomics', '1.2.4', 'docker',
         {'max_cpus': 16},
@@ -876,7 +876,7 @@ def test_build_plan_diaproteomics_executes_with_real_sha():
 def test_build_plan_metaboigniter_executes_with_real_sha():
     # nf-core/metaboigniter has a real SHA - validate_request and build_plan both work
     # build_plan cannot execute because the pipeline asset is not available
-    from research_agent.execution.nextflow import validate_request, PIPELINES
+    from research_agent.execution.nextflow import PIPELINES, validate_request
     result = validate_request(
         'nf-core/metaboigniter', '2.0.1', 'conda',
         {'max_cpus': 8},

@@ -26,7 +26,6 @@ from __future__ import annotations
 import csv
 import math
 from dataclasses import asdict, dataclass, field
-from pathlib import Path
 from typing import Any
 
 from .artifacts import ArtifactStore
@@ -94,7 +93,7 @@ def log1p_zscore(matrix: list[list[Any]], n_samples: int) -> list[list[float]]:
             col_sums[j] += lx
             col_sq_sums[j] += lx * lx
     col_means = [s / n for s in col_sums]
-    col_vars = [sq / n - m * m for sq, m in zip(col_sq_sums, col_means)]
+    col_vars = [sq / n - m * m for sq, m in zip(col_sq_sums, col_means, strict=False)]
     col_stds = [math.sqrt(max(v, 0.0)) if v > 0 else 1.0 for v in col_vars]
     result: list[list[float]] = []
     for row in matrix:
@@ -210,7 +209,7 @@ def convert_to_unified(
     # Persist canonical form when a store is available.
     if store is not None and artifact_relative_path and run_id:
         canonical_rows: list[list[str]] = [["feature_id"] + list(meta.sample_ids)]
-        for fid, row in zip(features, values):
+        for fid, row in zip(features, values, strict=False):
             canonical_rows.append([fid] + [str(v) for v in row])
         content = "\n".join(",".join(r) for r in canonical_rows) + "\n"
         store.import_bytes(
@@ -239,7 +238,7 @@ def read_matrix_from_store(
     try:
         with store.materialize({**artifact_spec, "user_id": user_id}) as path:
             rows: list[list[str]] = []
-            with open(path, "r", encoding="utf-8", newline="") as f:
+            with open(path, encoding="utf-8", newline="") as f:
                 reader = csv.reader(f)
                 for row in reader:
                     rows.append(row)

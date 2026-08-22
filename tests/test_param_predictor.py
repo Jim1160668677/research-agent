@@ -1,23 +1,21 @@
 """Tests for the active parameter prediction model."""
-import pytest
-from datetime import datetime, timezone
-from unittest.mock import patch, MagicMock
-
 import sys
+from datetime import datetime, timezone
+
+import pytest
+
 sys.path.insert(0, "src")
 
 from research_agent.research.param_predictor import (
     ParamRecommendation,
     PredictionContext,
-    PredictionResult,
-    predict_parameters,
-    _normalize_param_value,
-    _compute_overall_confidence,
     _build_warnings,
-    _merge_with_prior,
+    _compute_overall_confidence,
     _failure_fix_recommendations,
-    _apply_system_constraints,
+    _merge_with_prior,
+    _normalize_param_value,
     estimate_sample_sufficiency,
+    predict_parameters,
 )
 
 
@@ -262,11 +260,12 @@ def test_estimate_sample_sufficiency():
 @pytest.mark.asyncio
 async def test_predict_for_new_run_integration(tmp_path):
     """End-to-end: predict for a new run with historical data in DB."""
-    from research_agent.core.db import init_db
+    from datetime import datetime, timezone
+
     from research_agent.core import db as db_module
+    from research_agent.core.db import init_db
     from research_agent.core.models.db import PipelineRun
     from research_agent.research.param_predictor import predict_for_new_run
-    from datetime import datetime, timezone
 
     await init_db()
 
@@ -340,11 +339,12 @@ async def test_predict_for_new_run_no_historical(tmp_path):
 @pytest.mark.asyncio
 async def test_predict_respects_prior_parameters(tmp_path):
     """Prior parameters should not be overridden."""
-    from research_agent.core.db import init_db
+    from datetime import datetime, timezone
+
     from research_agent.core import db as db_module
+    from research_agent.core.db import init_db
     from research_agent.core.models.db import PipelineRun
     from research_agent.research.param_predictor import predict_for_new_run
-    from datetime import datetime, timezone
 
     await init_db()
 

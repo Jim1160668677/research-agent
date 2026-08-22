@@ -1,9 +1,7 @@
 """Tests for RO-Crate export functionality."""
-import hashlib
 import json
 import zipfile
 from io import BytesIO
-from pathlib import Path
 
 import pytest
 
@@ -301,12 +299,12 @@ async def test_rocrate_software_entity(tmp_path):
 @pytest.mark.asyncio
 async def test_rocrate_api_endpoint_integration(tmp_path, monkeypatch):
     """Integration test: POST /research/runs/{run_id}/rocrate returns valid zip."""
-    from research_agent.research.manager import get_run_manager
 
     # Create a minimal run in the test DB
-    from research_agent.core.db import init_db, AsyncSessionLocal
-    from research_agent.core.models.db import ResearchRun, ResearchRunStep, ResearchArtifact
     import uuid
+
+    from research_agent.core.db import AsyncSessionLocal, init_db
+    from research_agent.core.models.db import ResearchRun, ResearchRunStep
 
     await init_db()
 
@@ -340,11 +338,13 @@ async def test_rocrate_api_endpoint_integration(tmp_path, monkeypatch):
         db.add(step)
         await db.commit()
 
+    from unittest.mock import patch
+
+    from fastapi import FastAPI
     from fastapi.testclient import TestClient
+
     from research_agent.core.api.research import router as research_router
     from research_agent.core.auth import create_access_token
-    from unittest.mock import patch
-    from fastapi import FastAPI
 
     token = create_access_token(user_id=1, username="test", role="researcher")
     headers = {"Authorization": f"Bearer {token}"}

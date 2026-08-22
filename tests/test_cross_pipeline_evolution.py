@@ -1,7 +1,7 @@
 """Test for cross-pipeline evolution in pipeline_evolution handler"""
+
 import pytest
 import pytest_asyncio
-from pathlib import Path
 
 
 @pytest_asyncio.fixture
@@ -14,12 +14,13 @@ async def _setup_db(tmp_path):
 @pytest.mark.asyncio
 async def test_pipeline_evolution_cross_pipeline_aggregation(_setup_db, tmp_path, monkeypatch):
     """When a user has runs across multiple pipelines, cross-pipeline signals are aggregated."""
-    from research_agent.core.db import init_db
-    from research_agent.research.services import pipeline_evolution
-    from research_agent.research.artifacts import ArtifactStore
-    from research_agent.core.models.db import PipelineRun
-    from research_agent.core import db as db_module
     from datetime import datetime, timezone
+
+    from research_agent.core import db as db_module
+    from research_agent.core.db import init_db
+    from research_agent.core.models.db import PipelineRun
+    from research_agent.research.artifacts import ArtifactStore
+    from research_agent.research.services import pipeline_evolution
 
     await init_db()
 

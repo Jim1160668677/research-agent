@@ -106,6 +106,7 @@ def _light_migrations(conn):
             "source_metadata": "JSON",
             "source_synced_at": "DATETIME",
             "trust_status": "VARCHAR(20) DEFAULT 'curated'",
+            "smoke_tests": "JSON",
         }
         for col, ddl in new_columns.items():
             if col not in existing_cols:

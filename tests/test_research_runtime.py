@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from research_agent.core.app import create_app
+from research_agent.core.models.db import LearningProposal, UserProfile
 from research_agent.research.artifacts import ArtifactError, ArtifactStore
 from research_agent.research.contracts import CAPABILITIES
 from research_agent.research.planner import ResearchPlanner
@@ -17,7 +18,6 @@ from research_agent.research.services import (
     integrity_check,
     normalize_evidence,
 )
-from research_agent.core.models.db import UserProfile, LearningProposal
 
 
 def test_planner_builds_valid_dag_and_review_gates():
@@ -156,11 +156,12 @@ async def test_pipeline_evolution_handler_generates_proposals_on_low_feedback(
     tmp_path, monkeypatch
 ):
     """When feedback ratings are low, pipeline_evolution creates a LearningProposal."""
-    from research_agent.core.db import init_db
-    from research_agent.research.services import pipeline_evolution
-    from research_agent.research.artifacts import ArtifactStore
     from sqlalchemy import select
-    from research_agent.core.models.db import AgentFeedback, LearningProposal
+
+    from research_agent.core.db import init_db
+    from research_agent.core.models.db import AgentFeedback
+    from research_agent.research.artifacts import ArtifactStore
+    from research_agent.research.services import pipeline_evolution
 
     await init_db()
 
@@ -203,8 +204,8 @@ async def test_pipeline_evolution_handler_generates_proposals_on_low_feedback(
 async def test_pipeline_evolution_handler_no_signals(tmp_path, monkeypatch):
     """When there are no low ratings or failed runs, returns empty signals."""
     from research_agent.core.db import init_db
-    from research_agent.research.services import pipeline_evolution
     from research_agent.research.artifacts import ArtifactStore
+    from research_agent.research.services import pipeline_evolution
 
     await init_db()
 
@@ -221,12 +222,13 @@ async def test_pipeline_evolution_handler_no_signals(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_pipeline_evolution_handler_adaptive_optimization(tmp_path, monkeypatch):
     """When historical runs exist with parameter patterns, generates adaptive suggestions."""
-    from research_agent.core.db import init_db
-    from research_agent.research.services import pipeline_evolution
-    from research_agent.research.artifacts import ArtifactStore
-    from research_agent.core.models.db import PipelineRun
-    from research_agent.core import db as db_module
     from datetime import datetime, timezone
+
+    from research_agent.core import db as db_module
+    from research_agent.core.db import init_db
+    from research_agent.core.models.db import PipelineRun
+    from research_agent.research.artifacts import ArtifactStore
+    from research_agent.research.services import pipeline_evolution
 
     await init_db()
 
@@ -282,12 +284,13 @@ async def test_pipeline_evolution_handler_adaptive_optimization(tmp_path, monkey
 @pytest.mark.asyncio
 async def test_pipeline_evolution_handler_oom_pattern_detection(tmp_path, monkeypatch):
     """OOM errors in failed runs trigger increase_memory proposal."""
-    from research_agent.core.db import init_db
-    from research_agent.research.services import pipeline_evolution
-    from research_agent.research.artifacts import ArtifactStore
-    from research_agent.core.models.db import PipelineRun
-    from research_agent.core import db as db_module
     from datetime import datetime, timezone
+
+    from research_agent.core import db as db_module
+    from research_agent.core.db import init_db
+    from research_agent.core.models.db import PipelineRun
+    from research_agent.research.artifacts import ArtifactStore
+    from research_agent.research.services import pipeline_evolution
 
     await init_db()
 
@@ -317,12 +320,13 @@ async def test_pipeline_evolution_handler_oom_pattern_detection(tmp_path, monkey
 @pytest.mark.asyncio
 async def test_pipeline_evolution_handler_timeout_pattern_detection(tmp_path, monkeypatch):
     """Timeout errors in failed runs trigger increase_timeout proposal."""
-    from research_agent.core.db import init_db
-    from research_agent.research.services import pipeline_evolution
-    from research_agent.research.artifacts import ArtifactStore
-    from research_agent.core.models.db import PipelineRun
-    from research_agent.core import db as db_module
     from datetime import datetime, timezone
+
+    from research_agent.core import db as db_module
+    from research_agent.core.db import init_db
+    from research_agent.core.models.db import PipelineRun
+    from research_agent.research.artifacts import ArtifactStore
+    from research_agent.research.services import pipeline_evolution
 
     await init_db()
 
@@ -352,12 +356,13 @@ async def test_pipeline_evolution_handler_timeout_pattern_detection(tmp_path, mo
 @pytest.mark.asyncio
 async def test_pipeline_evolution_handler_code_improvement_on_repeated_failure(tmp_path, monkeypatch):
     """When a pipeline fails 2+ times, pipeline_evolution generates a code-level proposal."""
-    from research_agent.core.db import init_db
-    from research_agent.research.services import pipeline_evolution
-    from research_agent.research.artifacts import ArtifactStore
-    from research_agent.core.models.db import PipelineRun
-    from research_agent.core import db as db_module
     from datetime import datetime, timezone
+
+    from research_agent.core import db as db_module
+    from research_agent.core.db import init_db
+    from research_agent.core.models.db import PipelineRun
+    from research_agent.research.artifacts import ArtifactStore
+    from research_agent.research.services import pipeline_evolution
 
     await init_db()
 
@@ -417,6 +422,7 @@ async def test_pipeline_evolution_handler_code_improvement_on_repeated_failure(t
     # Verify proposal type
     async with db_module.AsyncSessionLocal() as db:
         from sqlalchemy import select
+
         from research_agent.core.models.db import LearningProposal
         prop_result = await db.execute(
             select(LearningProposal).where(LearningProposal.source_run_id == "code-fail-run-2")
@@ -431,12 +437,13 @@ async def test_pipeline_evolution_handler_code_improvement_on_repeated_failure(t
 @pytest.mark.asyncio
 async def test_pipeline_evolution_handler_code_improvement_llm_fallback(tmp_path, monkeypatch):
     """When LLM is unavailable, code-level proposal is still generated as fallback."""
-    from research_agent.core.db import init_db
-    from research_agent.research.services import pipeline_evolution
-    from research_agent.research.artifacts import ArtifactStore
-    from research_agent.core.models.db import PipelineRun
-    from research_agent.core import db as db_module
     from datetime import datetime, timezone
+
+    from research_agent.core import db as db_module
+    from research_agent.core.db import init_db
+    from research_agent.core.models.db import PipelineRun
+    from research_agent.research.artifacts import ArtifactStore
+    from research_agent.research.services import pipeline_evolution
 
     await init_db()
 
@@ -488,6 +495,7 @@ async def test_pipeline_evolution_handler_code_improvement_llm_fallback(tmp_path
     # Verify fallback proposal was stored
     async with db_module.AsyncSessionLocal() as db:
         from sqlalchemy import select
+
         from research_agent.core.models.db import LearningProposal
         prop_result = await db.execute(
             select(LearningProposal).where(LearningProposal.source_run_id == "fallback-run-2")
@@ -501,12 +509,13 @@ async def test_pipeline_evolution_handler_code_improvement_llm_fallback(tmp_path
 @pytest.mark.asyncio
 async def test_pipeline_evolution_handler_no_code_proposal_single_failure(tmp_path, monkeypatch):
     """A single pipeline failure should NOT generate a code-level proposal (needs 2+ failures)."""
-    from research_agent.core.db import init_db
-    from research_agent.research.services import pipeline_evolution
-    from research_agent.research.artifacts import ArtifactStore
-    from research_agent.core.models.db import PipelineRun
-    from research_agent.core import db as db_module
     from datetime import datetime, timezone
+
+    from research_agent.core import db as db_module
+    from research_agent.core.db import init_db
+    from research_agent.core.models.db import PipelineRun
+    from research_agent.research.artifacts import ArtifactStore
+    from research_agent.research.services import pipeline_evolution
 
     await init_db()
 
@@ -535,6 +544,7 @@ async def test_pipeline_evolution_handler_no_code_proposal_single_failure(tmp_pa
     # No code-level proposal should be in DB
     async with db_module.AsyncSessionLocal() as db:
         from sqlalchemy import select
+
         from research_agent.core.models.db import LearningProposal
         prop_result = await db.execute(
             select(LearningProposal).where(LearningProposal.source_run_id == "single-fail-run")
@@ -795,12 +805,13 @@ def test_research_run_executes_to_completion(client):
 @pytest.mark.asyncio
 async def test_pipeline_param_proposal_gets_stored_in_profile(tmp_path, monkeypatch):
     """When a pipeline_param proposal is applied, defaults are stored in user profile."""
-    from research_agent.core.db import init_db
-    from research_agent.core import db as db_module
-    from research_agent.core.models.db import LearningProposal, PipelineRun
-    from datetime import datetime, timezone
     import uuid
+    from datetime import datetime, timezone
+
     from sqlalchemy import select
+
+    from research_agent.core import db as db_module
+    from research_agent.core.db import init_db
 
     await init_db()
 
@@ -866,13 +877,12 @@ async def test_pipeline_param_proposal_gets_stored_in_profile(tmp_path, monkeypa
 @pytest.mark.asyncio
 async def test_pipeline_run_merges_stored_defaults(tmp_path, monkeypatch):
     """Pipeline run creation merges stored adaptive defaults with request params."""
-    from research_agent.core.app import create_app
+
+    from sqlalchemy import select
+
+    from research_agent.core import db as db_module
     from research_agent.core.db import init_db
     from research_agent.core.models.db import UserProfile
-    from research_agent.core import db as db_module
-    from sqlalchemy import select
-    from fastapi.testclient import TestClient
-    import asyncio
 
     test_db = tmp_path / "test_merge.db"
     test_db_url = f"sqlite+aiosqlite:///{test_db}"
